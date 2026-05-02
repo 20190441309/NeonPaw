@@ -1,0 +1,39 @@
+<h2>Development Approach — How to build the MVP?</h2>
+<p class="subtitle">Three strategies for getting from zero to working demo</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Visual-First Layered (Recommended)</h3>
+      <p><strong>Phase 1:</strong> All frontend UI — terminal shell, ASCII scene frames for all states, scanline/glow effects, status panel, boot animation. Uses mock data.</p>
+      <p><strong>Phase 2:</strong> Voice input/output — Web Speech API, mic button, TTS playback.</p>
+      <p><strong>Phase 3:</strong> Backend — FastAPI, /api/chat with mock responses, structured JSON.</p>
+      <p><strong>Phase 4:</strong> Integration — wire frontend to backend, localStorage persistence.</p>
+      <p class="label">PRO: You see the full visual experience early. Matches your "UI first" priority.</p>
+      <p class="label">CON: Integration risk is back-loaded. Real flow only works in Phase 4.</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Vertical Slice</h3>
+      <p><strong>Sprint 1:</strong> Minimal end-to-end: boot screen → click wake → simple pet frame → mock backend → display reply. Proves the full stack works.</p>
+      <p><strong>Sprint 2:</strong> Add voice input, TTS output.</p>
+      <p><strong>Sprint 3:</strong> Polish — all ASCII frames, effects, status panel, localStorage.</p>
+      <p class="label">PRO: Full stack validated early. Integration risk is lowest.</p>
+      <p class="label">CON: The demo looks rough until Sprint 3. You stare at a basic cat for a while.</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Parallel Component Build</h3>
+      <p>Frontend and backend scaffolded simultaneously. Each component (ASCIIPet, VoiceButton, ChatAPI, PetBrain) built independently with its own mock data. Integrated at the end.</p>
+      <p class="label">PRO: Fastest wall-clock time if everything goes right.</p>
+      <p class="label">CON: Highest integration risk. Debugging cross-stack issues at the end is painful. Not recommended for a solo developer.</p>
+    </div>
+  </div>
+</div>

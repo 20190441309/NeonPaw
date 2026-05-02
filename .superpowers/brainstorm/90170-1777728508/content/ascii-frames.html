@@ -1,0 +1,115 @@
+<h2>ASCII Scene Frames — State Gallery</h2>
+<p class="subtitle">Each pet state maps to a unique scene frame. Here are the key ones.</p>
+
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; font-size:11px;">
+
+<div class="mockup">
+  <div class="mockup-header">SLEEPING (idle default)</div>
+  <div class="mockup-body">
+    <pre style="background:#0a0a0a; color:#00ffcc; font-family:monospace; font-size:11px; line-height:1.35; padding:8px; margin:0; overflow-x:auto;">╭────────────────────────────────────────────────────────────╮
+│  PET CAPSULE // SLEEP MODE                         IDLE   │
+├────────────────────────────────────────────────────────────┤
+│                                                            │
+│              z       z        z                            │
+│        ╭────────────────────────────────────────╮          │
+│        │                                        │          │
+│        │              /\_/\\                    │          │
+│        │             ( -.- )    low power       │          │
+│        │             /  ^  \\                   │          │
+│        │          ─────────────                 │          │
+│        │        capsule temperature: stable     │          │
+│        ╰────────────────────────────────────────╯          │
+│                                                            │
+│        TAP SCREEN TO WAKE  │  DREAM CACHE: ACTIVE          │
+╰────────────────────────────────────────────────────────────╯</pre>
+  </div>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">LISTENING (voice input active)</div>
+  <div class="mockup-body">
+    <pre style="background:#0a0a0a; color:#00ffcc; font-family:monospace; font-size:11px; line-height:1.35; padding:8px; margin:0; overflow-x:auto;">╭────────────────────────────────────────────────────────────╮
+│  VOICE LINK // ACTIVE                          LISTENING  │
+├────────────────────────────────────────────────────────────┤
+│                                                            │
+│        ╭────────────────────────────────────────╮          │
+│        │              /\_/\\        )))         │          │
+│        │             ( o.o )                    │          │
+│        │             /  ^  \\                   │          │
+│        │                                        │          │
+│        │      microphone stream detected        │          │
+│        │      input wave: ▂▃▅▇▆▅▃▂▃▅▆▇▅        │          │
+│        ╰────────────────────────────────────────╯          │
+│                                                            │
+│        SAY SOMETHING  │  STT BUFFER: RECORDING             │
+╰────────────────────────────────────────────────────────────╯</pre>
+  </div>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">HAPPY (positive emotion)</div>
+  <div class="mockup-body">
+    <pre style="background:#0a0a0a; color:#00ffcc; font-family:monospace; font-size:11px; line-height:1.35; padding:8px; margin:0; overflow-x:auto;">╭────────────────────────────────────────────────────────────╮
+│  EMOTION CORE // POSITIVE                         HAPPY   │
+├────────────────────────────────────────────────────────────┤
+│                                                            │
+│        ╭────────────────────────────────────────╮          │
+│        │              /\_/\\          ✦         │          │
+│        │             ( ^.^ )     ✦              │          │
+│        │             /  ^  \\                   │          │
+│        │                                        │          │
+│        │      mood       + + +                  │          │
+│        │      affinity   + +                    │          │
+│        ╰────────────────────────────────────────╯          │
+│                                                            │
+│        SIGNAL GLOW: ACTIVE  │  COMPANION LINK: WARM        │
+╰────────────────────────────────────────────────────────────╯</pre>
+  </div>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">GLITCH (error / unstable)</div>
+  <div class="mockup-body">
+    <pre style="background:#0a0a0a; color:#00ffcc; font-family:monospace; font-size:11px; line-height:1.35; padding:8px; margin:0; overflow-x:auto;">╭────────────────────────────────────────────────────────────╮
+│  SIGNAL ERROR // GLITCH                         UNSTABLE  │
+├────────────────────────────────────────────────────────────┤
+│                                                            │
+│        ╭──────────────#─────────────────────────╮          │
+│        │              /\_/\\                    │          │
+│        │             ( x_x )       !!           │          │
+│        │             /  #  \\                   │          │
+│        │                                        │          │
+│        │      c0re_s1gnal: unstable             │          │
+│        │      attempting self repair...         │          │
+│        ╰────────────────────────#───────────────╯          │
+│                                                            │
+│        ERROR TRACE: 0xPAW-404  │  RECOVERY: RETRY          │
+╰────────────────────────────────────────────────────────────╯</pre>
+  </div>
+</div>
+
+</div>
+
+<div class="section" style="margin-top:20px;">
+  <h3>Chat Transcript Inside the Frame</h3>
+  <p>When there's conversation history, the chat log appears below the ASCII frame, still inside the terminal border. Example:</p>
+  <pre style="background:#0a0a0a; color:#00ffcc; font-family:monospace; font-size:11px; line-height:1.35; padding:8px; margin:0; overflow-x:auto;">╭────────────────────────────────────────────────────────────╮
+│  NEON PAW // ONLINE                               AWAKE   │
+├────────────────────────────────────────────────────────────┤
+│                                                            │
+│        ╭────────────────────────────────────────╮          │
+│        │              /\_/\\                    │          │
+│        │             ( o.o )                    │          │
+│        │             /  ^  \\                   │          │
+│        │                                        │          │
+│        │      signal locked: user nearby        │          │
+│        ╰────────────────────────────────────────╯          │
+│                                                            │
+│  USER: 你好                                                │
+│  PAW:  信号接入成功，NEON PAW 已上线。                      │
+│  USER: 今天心情不好                                         │
+│  PAW:  我在呢，有什么想说的都可以告诉我。                    │
+│                                                            │
+│        STATUS: STABLE  │  MOOD: CALM  │  LINK: READY       │
+╰────────────────────────────────────────────────────────────╯</pre>
+</div>
