@@ -30,6 +30,7 @@ export default function Home() {
   const [wakeWordEnabled, setWakeWordEnabled] = useState(false);
   const [wakeWordReady, setWakeWordReady] = useState(false);
   const [wakeStatus, setWakeStatus] = useState<string | null>(null);
+  const [sessionActive, setSessionActive] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem("neon_paw_wake_mode");
@@ -47,13 +48,9 @@ export default function Home() {
   const petStateRef = useRef(pet.petState);
   const historyRef = useRef(pet.history);
   const memoriesRef = useRef(memory.memories);
-  const sttStartRef = useRef(stt.start);
-  const sttStopRef = useRef(stt.stop);
   petStateRef.current = pet.petState;
   historyRef.current = pet.history;
   memoriesRef.current = memory.memories;
-  sttStartRef.current = stt.start;
-  sttStopRef.current = stt.stop;
 
   // Shared voice interaction flow — resumes wake listener after TTS
   const startVoiceInteraction = useCallback((text: string) => {
@@ -101,18 +98,15 @@ export default function Home() {
     });
   }, [pet, tts, memory]);
 
-  // Wake word hook — three callbacks:
-  //   onWake: wake phrase detected (inline or followup)
-  //   onCommand: follow-up command received from main STT
-  //   onCommandTimeout: no command heard within timeout
+  // Wake word hook — manages wake/command/session listening states
   const wakeWord = useWakeWord({
-    enabled: wakeWordEnabled && (pet.petState.mode === "sleeping" || pet.petState.mode === "awake"),
+    enabled: wakeWordEnabled && (pet.petState.mode === "sleeping" || pet.petState.mode === "awake" || sessionActive),
     onWake: useCallback((result: WakeResult) => {
       if (result.mode === "inline") {
-        // Inline command: send extracted text directly
         setWakeStatus("PROCESSING COMMAND");
+        setSessionActive(true); // Enter hands-free session
         if (process.env.NODE_ENV === "development") {
-          console.log("[WAKE] inline command:", result.command);
+          console.log("[PAGE] inline command:", result.command);
         }
         if (pet.petState.mode === "sleeping") {
           pet.wake();
@@ -121,44 +115,30 @@ export default function Home() {
           startVoiceInteraction(result.command!);
         }, 300);
       } else {
-        // Follow-up: start main STT for command
         setWakeStatus("LISTENING FOR COMMAND");
         if (process.env.NODE_ENV === "development") {
-          console.log("[WAKE] follow-up mode, starting main STT");
+          console.log("[PAGE] follow-up mode, wake hook capturing command");
         }
         if (pet.petState.mode === "sleeping") {
           pet.wake();
         }
-        // Tell the wake hook to enter command_listening mode
-        // (it stays quiet, doesn't look for wake phrases)
-        // The actual main STT start happens after a short delay
-        setTimeout(() => {
-          pet.setListening();
-          sttStartRef.current((text: string) => {
-            // Main STT received a command
-            if (process.env.NODE_ENV === "development") {
-              console.log("[WAKE] follow-up command received:", text);
-            }
-            wakeWordRef.current?.completeCommand();
-            setWakeStatus("PROCESSING COMMAND");
-            startVoiceInteraction(text);
-          });
-        }, 300);
       }
     }, [pet, startVoiceInteraction]),
     onCommand: useCallback((text: string) => {
-      // This is called if the wake hook itself captures a command
-      // (currently unused since we delegate to main STT, but kept for future use)
       setWakeStatus("PROCESSING COMMAND");
+      setSessionActive(true); // Enter hands-free session after first command
+      if (process.env.NODE_ENV === "development") {
+        console.log("[PAGE] command captured:", text);
+      }
       startVoiceInteraction(text);
     }, [startVoiceInteraction]),
     onCommandTimeout: useCallback(() => {
       if (process.env.NODE_ENV === "development") {
-        console.log("[WAKE] command timeout — returning to wake listening");
+        console.log("[PAGE] command/session timeout");
       }
-      setWakeStatus("NO COMMAND HEARD // WAKE LISTENING");
+      setSessionActive(false); // Exit hands-free session
+      setWakeStatus("SESSION TIMEOUT // WAKE WORD ACTIVE");
       pet.setIdle();
-      // Clear the status after a moment
       setTimeout(() => setWakeStatus(null), 3000);
     }, [pet]),
     isSupported: stt.isSupported && wakeWordReady,
@@ -167,18 +147,6 @@ export default function Home() {
   // Keep a ref to wakeWord for use in callbacks
   const wakeWordRef = useRef(wakeWord);
   wakeWordRef.current = wakeWord;
-
-  // When follow-up mode is entered, tell the wake hook to start command_listening
-  const cmdListeningStartedRef = useRef(false);
-  useEffect(() => {
-    if (wakeStatus === "LISTENING FOR COMMAND" && !cmdListeningStartedRef.current) {
-      cmdListeningStartedRef.current = true;
-      wakeWord.startCommandListening();
-    }
-    if (wakeStatus === null) {
-      cmdListeningStartedRef.current = false;
-    }
-  }, [wakeStatus, wakeWord]);
 
   // Pause wake listener when main STT starts (e.g. from click-to-talk)
   useEffect(() => {
@@ -209,11 +177,14 @@ export default function Home() {
 
   const footerHint =
     pet.petState.mode === "sleeping" && wakeWordEnabled ? "SAY \"NEON PAW\" OR \"小爪醒醒\"" :
+    pet.petState.mode === "awake" && wakeWordEnabled && sessionActive ? (wakeStatus || "SESSION LISTENING") :
     pet.petState.mode === "awake" && wakeWordEnabled ? (wakeStatus || "WAKE WORD ACTIVE") :
     pet.petState.mode === "sleeping" ? "TAP SCREEN TO WAKE" :
     pet.petState.mode === "awake" ? "TAP MICROPHONE TO TALK" :
     pet.petState.mode === "listening" ? "LISTENING..." :
+    pet.petState.mode === "thinking" && sessionActive ? "SESSION // THINKING..." :
     pet.petState.mode === "thinking" ? "PET BRAIN PROCESSING..." :
+    pet.petState.mode === "speaking" && sessionActive ? "SESSION // SPEAKING..." :
     pet.petState.mode === "speaking" ? "NEON PAW IS TALKING..." :
     pet.petState.mode === "error" ? "SIGNAL ERROR // RETRY" :
     "TAP SCREEN TO WAKE";

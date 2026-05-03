@@ -13,7 +13,13 @@ const WAKE_PHRASES = [
   "neon paw",
 ];
 
-const COMMAND_TIMEOUT_MS = 10000; // 10 seconds to say a command
+const STOP_PHRASES = ["先这样", "不用了", "结束对话", "退出", "stop", "sleep"];
+
+const COMMAND_TIMEOUT_MS = 10000;   // 10s to say a command after wake
+const SESSION_TIMEOUT_MS = 25000;   // 25s silence ends session
+const COMMAND_MAX_RETRIES = 3;
+const SESSION_MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 600;
 
 function normalizeText(text: string): string {
   return text
@@ -34,7 +40,6 @@ export interface WakeResult {
 function extractCommand(transcript: string): WakeResult | null {
   const lower = transcript.toLowerCase();
 
-  // Longest-first match: "小爪醒醒" before "醒醒"
   for (const phrase of WAKE_PHRASES) {
     const idx = lower.indexOf(phrase);
     if (idx !== -1) {
@@ -53,7 +58,6 @@ function extractCommand(transcript: string): WakeResult | null {
     }
   }
 
-  // Fallback: normalized substring match
   const normalized = normalizeText(transcript);
   const matched = WAKE_PHRASES.some((phrase) => normalized.includes(phrase));
   if (matched) {
@@ -66,6 +70,11 @@ function extractCommand(transcript: string): WakeResult | null {
   return null;
 }
 
+function isStopPhrase(text: string): boolean {
+  const trimmed = text.trim().toLowerCase();
+  return STOP_PHRASES.some((p) => trimmed === p || trimmed.includes(p));
+}
+
 interface Options {
   enabled: boolean;
   onWake: (result: WakeResult) => void;
@@ -74,28 +83,42 @@ interface Options {
   isSupported: boolean;
 }
 
-export type WakeMode = "idle" | "wake_listening" | "command_listening";
+export type WakeMode = "idle" | "wake_listening" | "command_listening" | "session_listening";
 
 export function useWakeWord({ enabled, onWake, onCommand, onCommandTimeout, isSupported }: Options) {
   const [isActive, setIsActive] = useState(false);
   const [mode, setMode] = useState<WakeMode>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [sessionActive, setSessionActive] = useState(false);
+
   const recognitionRef = useRef<any>(null);
   const enabledRef = useRef(enabled);
   const onWakeRef = useRef(onWake);
   const onCommandRef = useRef(onCommand);
   const onCommandTimeoutRef = useRef(onCommandTimeout);
-  const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const commandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const wakeMatchedRef = useRef(false);
   const pausedRef = useRef(false);
   const modeRef = useRef<WakeMode>("idle");
+  const sessionActiveRef = useRef(false);
+  const wakeMatchedRef = useRef(false);
+
+  // Timers
+  const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const commandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const commandRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sessionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sessionRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Retry counters
   const emptyRetriesRef = useRef(0);
+  const commandRetriesRef = useRef(0);
+  const sessionRetriesRef = useRef(0);
 
   enabledRef.current = enabled;
   onWakeRef.current = onWake;
   onCommandRef.current = onCommand;
   onCommandTimeoutRef.current = onCommandTimeout;
+
+  // ── Helpers ──────────────────────────────────────────────────────────
 
   const setModeState = useCallback((m: WakeMode) => {
     modeRef.current = m;
@@ -105,14 +128,21 @@ export function useWakeWord({ enabled, onWake, onCommand, onCommandTimeout, isSu
     }
   }, []);
 
-  const clearAllTimers = useCallback(() => {
-    if (restartTimerRef.current) {
-      clearTimeout(restartTimerRef.current);
-      restartTimerRef.current = null;
+  const setSessionState = useCallback((active: boolean) => {
+    sessionActiveRef.current = active;
+    setSessionActive(active);
+    if (process.env.NODE_ENV === "development") {
+      console.log("[WAKE] session active:", active);
     }
-    if (commandTimerRef.current) {
-      clearTimeout(commandTimerRef.current);
-      commandTimerRef.current = null;
+  }, []);
+
+  const clearAllTimers = useCallback(() => {
+    const timers = [restartTimerRef, commandTimerRef, commandRetryTimerRef, sessionTimerRef, sessionRetryTimerRef];
+    for (const ref of timers) {
+      if (ref.current) {
+        clearTimeout(ref.current);
+        ref.current = null;
+      }
     }
   }, []);
 
@@ -128,24 +158,64 @@ export function useWakeWord({ enabled, onWake, onCommand, onCommandTimeout, isSu
     clearAllTimers();
     stopRecognition();
     setModeState("idle");
+    setSessionState(false);
     emptyRetriesRef.current = 0;
-  }, [clearAllTimers, stopRecognition, setModeState]);
+    commandRetriesRef.current = 0;
+    sessionRetriesRef.current = 0;
+  }, [clearAllTimers, stopRecognition, setModeState, setSessionState]);
+
+  // ── Start Recognition Builder ───────────────────────────────────────
+
+  const createRecognition = useCallback((
+    lang: string,
+    continuous: boolean,
+    interimResults: boolean,
+    onresult: (event: any) => void,
+    onstart?: () => void,
+  ) => {
+    const Ctor =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
+    if (!Ctor) return null;
+
+    const r = new Ctor();
+    r.lang = lang;
+    r.continuous = continuous;
+    r.interimResults = interimResults;
+
+    r.onstart = () => {
+      setIsActive(true);
+      setError(null);
+      onstart?.();
+    };
+
+    r.onresult = onresult;
+
+    r.onerror = (event: any) => {
+      if (process.env.NODE_ENV === "development") {
+        console.log("[WAKE] recognition error:", event.error, "mode:", modeRef.current);
+      }
+      if (event.error === "not-allowed") {
+        setError("麦克风权限被拒绝");
+        setIsActive(false);
+        setModeState("idle");
+        setSessionState(false);
+        clearAllTimers();
+      }
+    };
+
+    r.onend = () => {
+      setIsActive(false);
+    };
+
+    return r;
+  }, [setModeState, setSessionState, clearAllTimers]);
+
+  // ── Wake Listening ──────────────────────────────────────────────────
 
   const startWakeListening = useCallback(() => {
     if (typeof window === "undefined" || !enabledRef.current || pausedRef.current) return;
 
-    const SpeechRecognitionCtor =
-      (window as any).SpeechRecognition ||
-      (window as any).webkitSpeechRecognition;
-
-    if (!SpeechRecognitionCtor) {
-      if (process.env.NODE_ENV === "development") {
-        console.log("[WAKE] SpeechRecognition not available");
-      }
-      return;
-    }
-
-    // Stop existing instance
     stopRecognition();
     clearAllTimers();
     wakeMatchedRef.current = false;
@@ -153,85 +223,56 @@ export function useWakeWord({ enabled, onWake, onCommand, onCommandTimeout, isSu
 
     setModeState("wake_listening");
 
-    const recognition = new SpeechRecognitionCtor();
-    recognition.lang = "zh-CN";
-    recognition.continuous = true;
-    recognition.interimResults = true;
+    const recognition = createRecognition(
+      "zh-CN", true, true,
+      (event: any) => {
+        if (pausedRef.current || modeRef.current !== "wake_listening") return;
 
-    recognition.onstart = () => {
-      setIsActive(true);
-      setError(null);
-      if (process.env.NODE_ENV === "development") {
-        console.log("[WAKE] recognition started, mode: wake_listening");
-      }
-    };
-
-    recognition.onresult = (event: any) => {
-      // Guard: ignore results if paused (main STT is active)
-      if (pausedRef.current) {
-        if (process.env.NODE_ENV === "development") {
-          console.log("[WAKE] ignoring result — paused");
-        }
-        return;
-      }
-      // Guard: ignore results if not in wake_listening mode
-      if (modeRef.current !== "wake_listening") {
-        if (process.env.NODE_ENV === "development") {
-          console.log("[WAKE] ignoring result — mode is", modeRef.current);
-        }
-        return;
-      }
-
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (process.env.NODE_ENV === "development") {
-          console.log("[WAKE] raw transcript:", transcript);
-          console.log("[WAKE] normalized:", normalizeText(transcript));
-        }
-        const result = extractCommand(transcript);
-        if (result) {
-          wakeMatchedRef.current = true;
-          emptyRetriesRef.current = 0;
-          stopRecognition();
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
           if (process.env.NODE_ENV === "development") {
-            console.log("[WAKE] wake detected, mode:", result.mode, "command:", result.command ?? "(none)");
+            console.log("[WAKE] raw transcript:", transcript);
+            console.log("[WAKE] normalized:", normalizeText(transcript));
           }
-          if (result.mode === "inline" && result.command) {
-            // Inline command: send directly
-            setModeState("idle");
-            onWakeRef.current(result);
-          } else {
-            // Follow-up: switch to command_listening
-            setModeState("command_listening");
-            onWakeRef.current(result);
+          const result = extractCommand(transcript);
+          if (result) {
+            wakeMatchedRef.current = true;
+            emptyRetriesRef.current = 0;
+            stopRecognition();
+            if (process.env.NODE_ENV === "development") {
+              console.log("[WAKE] wake detected, mode:", result.mode, "command:", result.command ?? "(none)");
+            }
+            if (result.mode === "inline" && result.command) {
+              setSessionState(true); // Activate session — resume() will use session_listening
+              setModeState("idle");
+              onWakeRef.current(result);
+            } else {
+              setModeState("command_listening");
+              onWakeRef.current(result);
+              setTimeout(() => {
+                if (enabledRef.current && !pausedRef.current && modeRef.current === "command_listening") {
+                  startCommandCapture();
+                }
+              }, 300);
+            }
+            return;
           }
-          return;
         }
-      }
-    };
+      },
+      () => {
+        if (process.env.NODE_ENV === "development") {
+          console.log("[WAKE] recognition started, mode: wake_listening");
+        }
+      },
+    );
 
-    recognition.onerror = (event: any) => {
-      if (process.env.NODE_ENV === "development") {
-        console.log("[WAKE] recognition error:", event.error);
-      }
-      if (event.error === "not-allowed") {
-        setError("麦克风权限被拒绝");
-        setIsActive(false);
-        setModeState("idle");
-        return;
-      }
-    };
-
+    if (!recognition) return;
     recognition.onend = () => {
       setIsActive(false);
       if (process.env.NODE_ENV === "development") {
         console.log("[WAKE] recognition ended, wakeMatched:", wakeMatchedRef.current, "paused:", pausedRef.current, "mode:", modeRef.current);
       }
-      // Don't restart if paused, matched, or not enabled
-      if (wakeMatchedRef.current || pausedRef.current || !enabledRef.current) {
-        return;
-      }
-      // Backoff restart for empty results
+      if (wakeMatchedRef.current || pausedRef.current || !enabledRef.current) return;
       if (modeRef.current === "wake_listening") {
         emptyRetriesRef.current++;
         const delay = Math.min(800 * emptyRetriesRef.current, 5000);
@@ -247,39 +288,215 @@ export function useWakeWord({ enabled, onWake, onCommand, onCommandTimeout, isSu
     };
 
     recognitionRef.current = recognition;
-    try {
-      recognition.start();
-    } catch {
-      setIsActive(false);
-    }
-  }, [stopRecognition, clearAllTimers, setModeState]);
+    try { recognition.start(); } catch { setIsActive(false); }
+  }, [stopRecognition, clearAllTimers, setModeState, createRecognition]);
 
-  /** Start command_listening mode — wake hook stays quiet, main STT handles it */
-  const startCommandListening = useCallback(() => {
-    setModeState("command_listening");
-    emptyRetriesRef.current = 0;
+  // ── Command Capture (one-shot after wake phrase) ────────────────────
+
+  const startCommandCapture = useCallback(() => {
+    if (typeof window === "undefined" || !enabledRef.current || pausedRef.current) return;
+
+    stopRecognition();
+    clearAllTimers();
+    commandRetriesRef.current = 0;
 
     if (process.env.NODE_ENV === "development") {
-      console.log("[WAKE] command_listening started, timeout:", COMMAND_TIMEOUT_MS, "ms");
+      console.log("[WAKE] starting command capture, timeout:", COMMAND_TIMEOUT_MS, "ms");
     }
 
-    // Command timeout — return to wake_listening if no command heard
     commandTimerRef.current = setTimeout(() => {
       if (modeRef.current === "command_listening") {
         if (process.env.NODE_ENV === "development") {
-          console.log("[WAKE] command timeout — returning to wake_listening");
+          console.log("[WAKE] command timeout — no command heard");
         }
         setModeState("idle");
         onCommandTimeoutRef.current();
-        // Resume wake listening
         if (enabledRef.current && !pausedRef.current) {
-          startWakeListening();
+          setTimeout(() => startWakeListening(), 300);
         }
       }
     }, COMMAND_TIMEOUT_MS);
-  }, [setModeState, startWakeListening]);
 
-  /** Pause wake listener completely (e.g. during click-to-talk) */
+    const recognition = createRecognition(
+      "zh-CN", false, false,
+      (event: any) => {
+        if (pausedRef.current || modeRef.current !== "command_listening") return;
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          if (event.results[i].isFinal) {
+            const transcript = event.results[i][0].transcript.trim();
+            if (transcript.length > 0) {
+              if (process.env.NODE_ENV === "development") {
+                console.log("[WAKE] command captured:", transcript);
+              }
+              clearAllTimers();
+              stopRecognition();
+              // Activate session — after TTS, we'll enter session_listening
+              setSessionState(true);
+              setModeState("idle");
+              onCommandRef.current(transcript);
+              return;
+            }
+          }
+        }
+      },
+      () => {
+        if (process.env.NODE_ENV === "development") {
+          console.log("[WAKE] command capture started");
+        }
+      },
+    );
+
+    if (!recognition) return;
+    recognition.onend = () => {
+      setIsActive(false);
+      if (process.env.NODE_ENV === "development") {
+        console.log("[WAKE] command capture ended, mode:", modeRef.current);
+      }
+      if (modeRef.current !== "command_listening" || pausedRef.current || !enabledRef.current) return;
+
+      commandRetriesRef.current++;
+      if (commandRetriesRef.current <= COMMAND_MAX_RETRIES) {
+        if (process.env.NODE_ENV === "development") {
+          console.log("[WAKE] command capture retry", commandRetriesRef.current, "/", COMMAND_MAX_RETRIES);
+        }
+        commandRetryTimerRef.current = setTimeout(() => {
+          if (enabledRef.current && !pausedRef.current && modeRef.current === "command_listening") {
+            startCommandCapture();
+          }
+        }, RETRY_DELAY_MS);
+      }
+    };
+
+    recognitionRef.current = recognition;
+    try { recognition.start(); } catch { setIsActive(false); }
+  }, [stopRecognition, clearAllTimers, setModeState, setSessionState, createRecognition, startWakeListening]);
+
+  // ── Session Listening (continuous conversation) ─────────────────────
+
+  const startSessionListening = useCallback(() => {
+    if (typeof window === "undefined" || !enabledRef.current || pausedRef.current) return;
+
+    stopRecognition();
+    clearAllTimers();
+    sessionRetriesRef.current = 0;
+
+    if (process.env.NODE_ENV === "development") {
+      console.log("[WAKE] starting session listening, timeout:", SESSION_TIMEOUT_MS, "ms");
+    }
+
+    setModeState("session_listening");
+
+    sessionTimerRef.current = setTimeout(() => {
+      if (modeRef.current === "session_listening") {
+        if (process.env.NODE_ENV === "development") {
+          console.log("[WAKE] session timeout — no speech for", SESSION_TIMEOUT_MS, "ms");
+        }
+        setSessionState(false);
+        setModeState("idle");
+        onCommandTimeoutRef.current();
+        if (enabledRef.current && !pausedRef.current) {
+          setTimeout(() => startWakeListening(), 300);
+        }
+      }
+    }, SESSION_TIMEOUT_MS);
+
+    const recognition = createRecognition(
+      "zh-CN", false, false,
+      (event: any) => {
+        if (pausedRef.current || modeRef.current !== "session_listening") return;
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          if (event.results[i].isFinal) {
+            const transcript = event.results[i][0].transcript.trim();
+            if (transcript.length > 0) {
+              if (process.env.NODE_ENV === "development") {
+                console.log("[WAKE] session transcript:", transcript);
+              }
+
+              // Reset session timeout on speech
+              sessionRetriesRef.current = 0;
+              if (sessionTimerRef.current) {
+                clearTimeout(sessionTimerRef.current);
+                sessionTimerRef.current = null;
+              }
+
+              // Check for stop phrase
+              if (isStopPhrase(transcript)) {
+                if (process.env.NODE_ENV === "development") {
+                  console.log("[WAKE] session ended by stop phrase:", transcript);
+                }
+                clearAllTimers();
+                stopRecognition();
+                setSessionState(false);
+                setModeState("idle");
+                // Resume wake listening after a brief pause
+                setTimeout(() => {
+                  if (enabledRef.current && !pausedRef.current) {
+                    startWakeListening();
+                  }
+                }, 500);
+                return;
+              }
+
+              // Normal command — send to chat
+              if (process.env.NODE_ENV === "development") {
+                console.log("[WAKE] sending session command:", transcript);
+              }
+              clearAllTimers();
+              stopRecognition();
+              setModeState("idle");
+              onCommandRef.current(transcript);
+              return;
+            }
+          }
+        }
+      },
+      () => {
+        if (process.env.NODE_ENV === "development") {
+          console.log("[WAKE] session listening started");
+        }
+      },
+    );
+
+    if (!recognition) return;
+    recognition.onend = () => {
+      setIsActive(false);
+      if (process.env.NODE_ENV === "development") {
+        console.log("[WAKE] session recognition ended, mode:", modeRef.current, "session:", sessionActiveRef.current);
+      }
+      if (modeRef.current !== "session_listening" || pausedRef.current || !enabledRef.current) return;
+
+      sessionRetriesRef.current++;
+      if (sessionRetriesRef.current <= SESSION_MAX_RETRIES) {
+        if (process.env.NODE_ENV === "development") {
+          console.log("[WAKE] session retry", sessionRetriesRef.current, "/", SESSION_MAX_RETRIES);
+        }
+        sessionRetryTimerRef.current = setTimeout(() => {
+          if (enabledRef.current && !pausedRef.current && modeRef.current === "session_listening") {
+            startSessionListening();
+          }
+        }, RETRY_DELAY_MS);
+      } else {
+        // Exhausted retries — end session
+        if (process.env.NODE_ENV === "development") {
+          console.log("[WAKE] session retries exhausted, ending session");
+        }
+        clearAllTimers();
+        setSessionState(false);
+        setModeState("idle");
+        if (enabledRef.current && !pausedRef.current) {
+          setTimeout(() => startWakeListening(), 500);
+        }
+      }
+    };
+
+    recognitionRef.current = recognition;
+    try { recognition.start(); } catch { setIsActive(false); }
+  }, [stopRecognition, clearAllTimers, setModeState, setSessionState, createRecognition, startWakeListening]);
+
+  // ── Pause / Resume ──────────────────────────────────────────────────
+
   const pause = useCallback(() => {
     pausedRef.current = true;
     clearAllTimers();
@@ -289,29 +506,26 @@ export function useWakeWord({ enabled, onWake, onCommand, onCommandTimeout, isSu
     }
   }, [clearAllTimers, stopRecognition]);
 
-  /** Resume wake listener after main interaction finishes */
   const resume = useCallback(() => {
     pausedRef.current = false;
     emptyRetriesRef.current = 0;
+    commandRetriesRef.current = 0;
+    sessionRetriesRef.current = 0;
     if (enabledRef.current && isSupported) {
+      const target = sessionActiveRef.current ? "session_listening" : "wake_listening";
       if (process.env.NODE_ENV === "development") {
-        console.log("[WAKE] resumed");
+        console.log("[WAKE] resumed, resume target:", target);
       }
-      startWakeListening();
+      if (sessionActiveRef.current) {
+        startSessionListening();
+      } else {
+        startWakeListening();
+      }
     }
-  }, [startWakeListening, isSupported]);
+  }, [startWakeListening, startSessionListening, isSupported]);
 
-  /** Complete command — called after main STT finishes or inline command sent */
-  const completeCommand = useCallback(() => {
-    if (process.env.NODE_ENV === "development") {
-      console.log("[WAKE] command completed");
-    }
-    clearAllTimers();
-    setModeState("idle");
-    // Wake listening will be resumed by resume() after TTS
-  }, [clearAllTimers, setModeState]);
+  // ── Lifecycle ───────────────────────────────────────────────────────
 
-  // Start/stop when enabled changes
   useEffect(() => {
     if (process.env.NODE_ENV === "development") {
       console.log("[WAKE] enabled changed:", enabled, "isSupported:", isSupported);
@@ -325,5 +539,5 @@ export function useWakeWord({ enabled, onWake, onCommand, onCommandTimeout, isSu
     return () => stopListening();
   }, [enabled, isSupported, startWakeListening, stopListening]);
 
-  return { isActive, mode, error, pause, resume, startCommandListening, completeCommand };
+  return { isActive, mode, error, sessionActive, pause, resume };
 }
