@@ -5,6 +5,7 @@
   --terminal-text: #00ffcc;
   --terminal-dim: #00ffcc66;
   --terminal-border: #00ffcc33;
+  --terminal-accent: #00ffcc1a;
 }
 
 body {
@@ -13,24 +14,33 @@ body {
   font-family: 'Courier New', 'Consolas', monospace;
 }
 
+/* Scanline overlay */
 .scanline::before {
   content: '';
   position: fixed;
   inset: 0;
   background: repeating-linear-gradient(
     0deg, transparent, transparent 2px,
-    rgba(0, 0, 0, 0.15) 2px, rgba(0, 0, 0, 0.15) 4px
+    rgba(0, 0, 0, 0.12) 2px, rgba(0, 0, 0, 0.12) 4px
   );
   pointer-events: none;
   z-index: 50;
 }
 
+/* Text glow */
 .glow {
   text-shadow:
     0 0 5px rgba(0, 255, 204, 0.4),
     0 0 10px rgba(0, 255, 204, 0.2);
 }
 
+.glow-subtle {
+  text-shadow:
+    0 0 4px rgba(0, 255, 204, 0.2),
+    0 0 8px rgba(0, 255, 204, 0.1);
+}
+
+/* Terminal flicker */
 @keyframes flicker {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.97; }
@@ -40,10 +50,95 @@ body {
   animation: 4s ease-in-out infinite flicker;
 }
 
+/* Status bars */
 .status-bar-fill {
   color: var(--terminal-text);
 }
 
 .status-bar-empty {
   color: #1a3a33;
+}
+
+/* Voice button pulse for listening state */
+@keyframes pulse-ring {
+  0% { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+.voice-pulse::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid #ef4444;
+  animation: 1.5s ease-out infinite pulse-ring;
+}
+
+/* Thinking spinner */
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.voice-spin {
+  animation: 2s linear infinite spin-slow;
+}
+
+/* Speaking wave */
+@keyframes wave {
+  0%, 100% { transform: scaleY(0.4); }
+  50% { transform: scaleY(1); }
+}
+
+.voice-wave {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 16px;
+}
+
+.voice-wave span {
+  display: inline-block;
+  width: 2px;
+  height: 100%;
+  background: var(--terminal-text);
+  animation: 0.8s ease-in-out infinite wave;
+}
+
+.voice-wave span:nth-child(2) { animation-delay: 0.1s; }
+.voice-wave span:nth-child(3) { animation-delay: 0.2s; }
+.voice-wave span:nth-child(4) { animation-delay: 0.3s; }
+
+/* Status hint dot */
+@keyframes blink-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.status-dot-blink {
+  animation: 2s ease-in-out infinite blink-dot;
+}
+
+/* Transcript message fade-in */
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: 0.3s ease-out fade-in-up;
+}
+
+/* Scrollbar styling */
+.terminal-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.terminal-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.terminal-scroll::-webkit-scrollbar-thumb {
+  background: var(--terminal-border);
+  border-radius: 2px;
 }
