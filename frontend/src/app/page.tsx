@@ -5,6 +5,7 @@ import ASCIIPet from "@/components/ASCIIPet";
 import PetStatusPanel from "@/components/PetStatusPanel";
 import ChatTranscript from "@/components/ChatTranscript";
 import VoiceButton from "@/components/VoiceButton";
+import AgentTracePanel from "@/components/AgentTracePanel";
 import { useCallback, useRef } from "react";
 import { usePetState } from "@/hooks/usePetState";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
@@ -65,6 +66,7 @@ export default function Home() {
       <ASCIIPet frame={pet.currentFrame} />
       <ChatTranscript messages={pet.history} />
       <PetStatusPanel state={pet.petState} />
+      <AgentTracePanel trace={pet.trace} />
       {stt.interimTranscript && (
         <div className="text-xs mt-2 opacity-60 text-center">
           {stt.interimTranscript}...
