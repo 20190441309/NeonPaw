@@ -5,10 +5,11 @@ interface Props {
   children: ReactNode;
   statusLabel: string;
   statusHint?: ReactNode;
+  footerHint?: string;
   onClick?: () => void;
 }
 
-export default function TerminalShell({ children, statusLabel, statusHint, onClick }: Props) {
+export default function TerminalShell({ children, statusLabel, statusHint, footerHint, onClick }: Props) {
   return (
     <div
       className="scanline terminal-flicker min-h-screen flex items-center justify-center p-3 sm:p-4"
@@ -29,7 +30,7 @@ export default function TerminalShell({ children, statusLabel, statusHint, onCli
         {/* Footer */}
         <div className="flex justify-between items-center px-3 sm:px-4 py-2 border-t border-[var(--terminal-border)] text-[10px] sm:text-xs">
           <div className="opacity-60">{statusHint}</div>
-          <div className="opacity-40">TAP SCREEN TO WAKE</div>
+          <div className="opacity-40 tracking-wider">{footerHint}</div>
         </div>
       </div>
     </div>

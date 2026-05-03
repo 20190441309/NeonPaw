@@ -64,10 +64,20 @@ export default function Home() {
 
   const isError = pet.petState.mode === "error";
 
+  const footerHint =
+    pet.petState.mode === "sleeping" ? "TAP SCREEN TO WAKE" :
+    pet.petState.mode === "awake" ? "TAP MICROPHONE TO TALK" :
+    pet.petState.mode === "listening" ? "LISTENING..." :
+    pet.petState.mode === "thinking" ? "PET BRAIN PROCESSING..." :
+    pet.petState.mode === "speaking" ? "NEON PAW IS TALKING..." :
+    pet.petState.mode === "error" ? "SIGNAL ERROR // RETRY" :
+    "TAP SCREEN TO WAKE";
+
   return (
     <TerminalShell
       statusLabel={pet.petState.mode.toUpperCase()}
       statusHint={<StatusHint trace={pet.trace} isConnected={isConnected} />}
+      footerHint={footerHint}
       onClick={pet.wake}
     >
       <ASCIIPet frame={pet.currentFrame} />

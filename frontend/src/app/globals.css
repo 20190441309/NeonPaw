@@ -12,6 +12,7 @@ body {
   background: var(--terminal-bg);
   color: var(--terminal-text);
   font-family: 'Courier New', 'Consolas', monospace;
+  color-scheme: dark;
 }
 
 /* Scanline overlay */
@@ -129,7 +130,12 @@ body {
   animation: 0.3s ease-out fade-in-up;
 }
 
-/* Scrollbar styling */
+/* Scrollbar styling — dark terminal style */
+.terminal-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #00ffcc33 transparent;
+}
+
 .terminal-scroll::-webkit-scrollbar {
   width: 4px;
 }
@@ -139,6 +145,10 @@ body {
 }
 
 .terminal-scroll::-webkit-scrollbar-thumb {
-  background: var(--terminal-border);
+  background: #00ffcc33;
   border-radius: 2px;
+}
+
+.terminal-scroll::-webkit-scrollbar-thumb:hover {
+  background: #00ffcc55;
 }
