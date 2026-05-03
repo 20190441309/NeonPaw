@@ -8,6 +8,7 @@ import VoiceButton from "@/components/VoiceButton";
 import AgentTracePanel from "@/components/AgentTracePanel";
 import StatusHint from "@/components/StatusHint";
 import MemoryPanel from "@/components/MemoryPanel";
+import MemoryNotification from "@/components/MemoryNotification";
 import { useCallback, useRef, useState } from "react";
 import { usePetState } from "@/hooks/usePetState";
 import { useMemory } from "@/hooks/useMemory";
@@ -85,7 +86,7 @@ export default function Home() {
   return (
     <TerminalShell
       statusLabel={pet.petState.mode.toUpperCase()}
-      statusHint={<StatusHint trace={pet.trace} isConnected={isConnected} />}
+      statusHint={<StatusHint trace={pet.trace} isConnected={isConnected} memoryCount={memory.memories.length} />}
       footerHint={footerHint}
       onClick={pet.wake}
     >
@@ -93,7 +94,8 @@ export default function Home() {
       <ChatTranscript messages={pet.history} />
       <PetStatusPanel state={pet.petState} />
       <AgentTracePanel trace={pet.trace} />
-      <MemoryPanel memories={memory.memories} onRemove={memory.removeMemory} />
+      <MemoryPanel memories={memory.memories} onRemove={memory.removeMemory} onClearAll={memory.clearMemories} />
+      <MemoryNotification content={memory.lastSaved} onDismiss={memory.clearLastSaved} />
       {stt.interimTranscript && (
         <div className="text-xs mt-2 opacity-50 text-center glow-subtle">
           {stt.interimTranscript}...

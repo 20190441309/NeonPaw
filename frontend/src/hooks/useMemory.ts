@@ -5,6 +5,10 @@ import { MemoryEntry } from "@/lib/types";
 const STORAGE_KEY = "neon_paw_memories";
 const MAX_MEMORIES = 30;
 
+function normalize(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
 function loadMemories(): MemoryEntry[] {
   if (typeof window === "undefined") return [];
   try {
@@ -31,6 +35,7 @@ function persistMemories(memories: MemoryEntry[]) {
 export function useMemory() {
   const [memories, setMemories] = useState<MemoryEntry[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  const [lastSaved, setLastSaved] = useState<string | null>(null);
 
   useEffect(() => {
     setMemories(loadMemories());
@@ -42,20 +47,28 @@ export function useMemory() {
   }, [memories, hydrated]);
 
   const addMemory = useCallback((content: string) => {
-    if (!content.trim()) return;
+    const trimmed = content.trim();
+    if (!trimmed) return false;
+    const norm = normalize(trimmed);
     setMemories((prev) => {
-      // Deduplicate: skip if same content already exists
-      if (prev.some((m) => m.content === content.trim())) return prev;
-      return [
-        ...prev,
-        { content: content.trim(), createdAt: new Date().toISOString() },
-      ].slice(-MAX_MEMORIES);
+      if (prev.some((m) => normalize(m.content) === norm)) return prev;
+      setLastSaved(trimmed);
+      return [...prev, { content: trimmed, createdAt: new Date().toISOString() }].slice(-MAX_MEMORIES);
     });
+    return true;
   }, []);
 
   const removeMemory = useCallback((index: number) => {
     setMemories((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
-  return { memories, addMemory, removeMemory };
+  const clearMemories = useCallback(() => {
+    setMemories([]);
+  }, []);
+
+  const clearLastSaved = useCallback(() => {
+    setLastSaved(null);
+  }, []);
+
+  return { memories, addMemory, removeMemory, clearMemories, lastSaved, clearLastSaved };
 }

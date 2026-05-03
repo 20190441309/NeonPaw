@@ -5,9 +5,10 @@ import { TraceEntry } from "@/lib/types";
 interface Props {
   trace: TraceEntry[];
   isConnected: boolean;
+  memoryCount?: number;
 }
 
-export default function StatusHint({ trace, isConnected }: Props) {
+export default function StatusHint({ trace, isConnected, memoryCount }: Props) {
   const isFallback = trace.some((t) => t.module === "fallback");
   const isLlm = trace.some(
     (t) => t.module === "root_agent" && t.message.includes("LLM")
@@ -37,6 +38,9 @@ export default function StatusHint({ trace, isConnected }: Props) {
       </span>
       {isLlm && (
         <span className="opacity-30">LLM</span>
+      )}
+      {memoryCount != null && memoryCount > 0 && (
+        <span className="opacity-30">MEM:{memoryCount}</span>
       )}
     </div>
   );
