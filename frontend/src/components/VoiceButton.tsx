@@ -6,6 +6,7 @@ interface Props {
   isSpeaking: boolean;
   isError?: boolean;
   isSupported: boolean;
+  isWakeWordActive?: boolean;
   onClick: () => void;
 }
 
@@ -15,6 +16,7 @@ export default function VoiceButton({
   isSpeaking,
   isError,
   isSupported,
+  isWakeWordActive,
   onClick,
 }: Props) {
   const isDisabled = isThinking || isSpeaking || !isSupported;
@@ -29,7 +31,9 @@ export default function VoiceButton({
           ? "思考中..."
           : isSpeaking
             ? "回复中..."
-            : "点击说话";
+            : isWakeWordActive
+              ? "唤醒监听中..."
+              : "点击说话";
 
   return (
     <div className="flex justify-center flex-col items-center mt-4 gap-2">
@@ -50,7 +54,9 @@ export default function VoiceButton({
                     ? "border-[var(--terminal-text)] opacity-60 cursor-not-allowed"
                     : isSpeaking
                       ? "border-[var(--terminal-text)] bg-[var(--terminal-text)]/10 cursor-not-allowed"
-                      : "border-[var(--terminal-text)]/60 hover:border-[var(--terminal-text)] hover:bg-[var(--terminal-text)]/10 cursor-pointer"
+                      : isWakeWordActive
+                        ? "border-green-500/60 bg-green-500/5 cursor-pointer"
+                        : "border-[var(--terminal-text)]/60 hover:border-[var(--terminal-text)] hover:bg-[var(--terminal-text)]/10 cursor-pointer"
           }
         `}
         aria-label={isListening ? "停止录音" : "开始说话"}
@@ -63,6 +69,8 @@ export default function VoiceButton({
           </span>
         ) : isListening ? (
           <span className="text-red-500">●</span>
+        ) : isWakeWordActive ? (
+          <span className="text-green-500">●</span>
         ) : isError ? (
           <span className="text-red-400">!</span>
         ) : (

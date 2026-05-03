@@ -6,10 +6,11 @@ interface Props {
   statusLabel: string;
   statusHint?: ReactNode;
   footerHint?: string;
+  headerAction?: ReactNode;
   onClick?: () => void;
 }
 
-export default function TerminalShell({ children, statusLabel, statusHint, footerHint, onClick }: Props) {
+export default function TerminalShell({ children, statusLabel, statusHint, footerHint, headerAction, onClick }: Props) {
   return (
     <div
       className="scanline terminal-flicker min-h-screen flex items-center justify-center p-3 sm:p-4"
@@ -19,7 +20,10 @@ export default function TerminalShell({ children, statusLabel, statusHint, foote
         {/* Header */}
         <div className="flex justify-between items-center px-3 sm:px-4 py-2 border-b border-[var(--terminal-border)] text-[10px] sm:text-xs">
           <span className="glow-subtle tracking-wider">NEON PAW // TERMINAL PET OS</span>
-          <span className="uppercase tracking-widest opacity-70">{statusLabel}</span>
+          <div className="flex items-center gap-2">
+            {headerAction}
+            <span className="uppercase tracking-widest opacity-70">{statusLabel}</span>
+          </div>
         </div>
 
         {/* Content */}
