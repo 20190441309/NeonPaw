@@ -5,61 +5,22 @@ import ASCIIPet from "@/components/ASCIIPet";
 import PetStatusPanel from "@/components/PetStatusPanel";
 import ChatTranscript from "@/components/ChatTranscript";
 import VoiceButton from "@/components/VoiceButton";
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { usePetState } from "@/hooks/usePetState";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
-import type { PetEmotion, PetAction, StateDelta, TraceEntry } from "@/lib/types";
-
-// Temporary mock — replaces real backend until Phase 3
-function mockReply(text: string): {
-  reply: string;
-  emotion: PetEmotion;
-  action: PetAction;
-  state_delta: StateDelta;
-  trace: TraceEntry[];
-} {
-  const msg = text.toLowerCase();
-  if (/(难过|伤心|不开心|累|烦|sad|tired|upset)/.test(msg)) {
-    return {
-      reply: "我在呢，有什么想说的都可以告诉我。",
-      emotion: "comforting",
-      action: "comfort",
-      state_delta: { energy: -2, mood: 5, affinity: 3, hunger: 0, stability: 0 },
-      trace: [{ module: "root_agent", message: "Sadness detected. Comfort action." }],
-    };
-  }
-  if (/(你好|hi|hello|嗨|醒醒|在吗|喂)/.test(msg)) {
-    return {
-      reply: "信号接入成功，NEON PAW 已上线。",
-      emotion: "happy",
-      action: "wake",
-      state_delta: { energy: -1, mood: 5, affinity: 3, hunger: 1, stability: 0 },
-      trace: [{ module: "root_agent", message: "Greeting detected. Wake action." }],
-    };
-  }
-  if (/(什么|为什么|怎么|吗|？|\?|how|what|why)/.test(msg)) {
-    return {
-      reply: "嗯……让我想想。",
-      emotion: "curious",
-      action: "think",
-      state_delta: { energy: -2, mood: 2, affinity: 2, hunger: 1, stability: 0 },
-      trace: [{ module: "root_agent", message: "Question detected. Think action." }],
-    };
-  }
-  return {
-    reply: "收到你的信号了。",
-    emotion: "neutral",
-    action: "speak",
-    state_delta: { energy: -2, mood: 2, affinity: 2, hunger: 1, stability: 0 },
-    trace: [{ module: "root_agent", message: "Default response. Speak action." }],
-  };
-}
+import { callChatApi } from "@/lib/api";
 
 export default function Home() {
   const pet = usePetState();
   const stt = useSpeechRecognition();
   const tts = useSpeechSynthesis();
+
+  // Refs for values needed inside the async callback but not as deps
+  const petStateRef = useRef(pet.petState);
+  const historyRef = useRef(pet.history);
+  petStateRef.current = pet.petState;
+  historyRef.current = pet.history;
 
   const handleVoiceClick = useCallback(() => {
     if (stt.isListening) {
@@ -67,13 +28,16 @@ export default function Home() {
       return;
     }
     pet.setListening();
-    stt.start((text) => {
+    stt.start(async (text) => {
       pet.setThinking();
       pet.addMessage({ role: "user", content: text, timestamp: new Date().toISOString() });
 
-      // Simulate network delay then use mock response
-      setTimeout(() => {
-        const response = mockReply(text);
+      try {
+        const response = await callChatApi({
+          message: text,
+          pet_state: petStateRef.current,
+          conversation_history: historyRef.current,
+        });
 
         pet.addMessage({ role: "assistant", content: response.reply, timestamp: new Date().toISOString() });
         pet.applyResponse(response);
@@ -82,9 +46,16 @@ export default function Home() {
         tts.speak(response.reply, () => {
           pet.setIdle();
         });
-      }, 800);
+      } catch {
+        pet.setError();
+        pet.addMessage({
+          role: "assistant",
+          content: "核心信号有点不稳定……但我还在这里。",
+          timestamp: new Date().toISOString(),
+        });
+      }
     });
-  }, [stt.isListening, stt.stop, stt.start, pet.setListening, pet.setThinking, pet.addMessage, pet.applyResponse, pet.setSpeaking, pet.setIdle, tts]);
+  }, [stt.isListening, stt.stop, stt.start, pet.setListening, pet.setThinking, pet.addMessage, pet.applyResponse, pet.setSpeaking, pet.setIdle, pet.setError, tts]);
 
   return (
     <TerminalShell
