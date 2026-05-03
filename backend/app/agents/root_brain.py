@@ -182,15 +182,41 @@ async def _call_llm(
     )
 
     content = completion.choices[0].message.content
-    if not content:
-        raise ValueError("LLM returned empty content")
+    if not content or not content.strip():
+        logger.warning("LLM returned empty content, using fallback response")
+        return ChatResponse(
+            reply="核心信号有点不稳定……但我还在这里。",
+            emotion="glitch",
+            action="glitch",
+            voice_style="soft_robotic",
+            state_delta=StateDelta(energy=-1, mood=-1, stability=-3),
+            memory=Memory(),
+            trace=[
+                TraceEntry(module="root_agent", message="LLM returned empty content; fallback response used."),
+            ],
+        )
 
     content = content.strip()
     if content.startswith("```"):
         content = re.sub(r"^```(?:json)?\s*", "", content)
         content = re.sub(r"\s*```$", "", content)
 
-    data = json.loads(content)
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError:
+        logger.warning("LLM returned non-JSON content: %s", content[:100])
+        return ChatResponse(
+            reply="核心信号有点不稳定……但我还在这里。",
+            emotion="glitch",
+            action="glitch",
+            voice_style="soft_robotic",
+            state_delta=StateDelta(energy=-1, mood=-1, stability=-3),
+            memory=Memory(),
+            trace=[
+                TraceEntry(module="root_agent", message="LLM returned invalid JSON; fallback response used."),
+            ],
+        )
+
     trace = _infer_llm_trace(data, message)
     return _validate_llm_response(data, trace)
 

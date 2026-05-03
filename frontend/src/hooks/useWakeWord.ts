@@ -2,7 +2,36 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 
-const WAKE_PHRASES = ["neon paw", "小爪", "小爪醒醒", "醒醒"];
+const WAKE_PHRASES = [
+  "neon paw",
+  "小爪",
+  "小爪醒醒",
+  "醒醒",
+  "小抓",
+  "小抓醒醒",
+  "小早",
+  "小早醒醒",
+];
+
+function normalizeText(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[\s\.,!?;:'"，。！？；：""''、·\-_~`@#\$%\^&\*\(\)\[\]\{\}\/\\|<>=+]/g, "")
+    .trim();
+}
+
+function matchesWakePhrase(transcript: string): boolean {
+  const normalized = normalizeText(transcript);
+  if (process.env.NODE_ENV === "development") {
+    console.log("[WAKE] raw transcript:", transcript);
+    console.log("[WAKE] normalized:", normalized);
+  }
+  const matched = WAKE_PHRASES.some((phrase) => normalized.includes(phrase));
+  if (process.env.NODE_ENV === "development") {
+    console.log("[WAKE] matched:", matched);
+  }
+  return matched;
+}
 
 interface Options {
   enabled: boolean;
@@ -17,6 +46,7 @@ export function useWakeWord({ enabled, onWakePhrase, isSupported }: Options) {
   const enabledRef = useRef(enabled);
   const onWakeRef = useRef(onWakePhrase);
   const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wakeMatchedRef = useRef(false);
 
   enabledRef.current = enabled;
   onWakeRef.current = onWakePhrase;
@@ -40,12 +70,19 @@ export function useWakeWord({ enabled, onWakePhrase, isSupported }: Options) {
       (window as any).SpeechRecognition ||
       (window as any).webkitSpeechRecognition;
 
-    if (!SpeechRecognitionCtor) return;
+    if (!SpeechRecognitionCtor) {
+      if (process.env.NODE_ENV === "development") {
+        console.log("[WAKE] SpeechRecognition not available");
+      }
+      return;
+    }
 
     // Stop existing instance
     try {
       recognitionRef.current?.stop();
     } catch {}
+
+    wakeMatchedRef.current = false;
 
     const recognition = new SpeechRecognitionCtor();
     recognition.lang = "zh-CN";
@@ -55,19 +92,23 @@ export function useWakeWord({ enabled, onWakePhrase, isSupported }: Options) {
     recognition.onstart = () => {
       setIsActive(true);
       setError(null);
+      if (process.env.NODE_ENV === "development") {
+        console.log("[WAKE] recognition started");
+      }
     };
 
     recognition.onresult = (event: any) => {
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript.toLowerCase();
-        const matched = WAKE_PHRASES.some((phrase) =>
-          transcript.includes(phrase)
-        );
-        if (matched) {
+        const transcript = event.results[i][0].transcript;
+        if (matchesWakePhrase(transcript)) {
+          wakeMatchedRef.current = true;
           // Stop listening and fire callback
           try {
             recognition.stop();
           } catch {}
+          if (process.env.NODE_ENV === "development") {
+            console.log("[WAKE] wake phrase detected, firing callback");
+          }
           onWakeRef.current();
           return;
         }
@@ -75,6 +116,9 @@ export function useWakeWord({ enabled, onWakePhrase, isSupported }: Options) {
     };
 
     recognition.onerror = (event: any) => {
+      if (process.env.NODE_ENV === "development") {
+        console.log("[WAKE] recognition error:", event.error);
+      }
       if (event.error === "not-allowed") {
         setError("麦克风权限被拒绝");
         setIsActive(false);
@@ -85,13 +129,26 @@ export function useWakeWord({ enabled, onWakePhrase, isSupported }: Options) {
 
     recognition.onend = () => {
       setIsActive(false);
+      if (process.env.NODE_ENV === "development") {
+        console.log("[WAKE] recognition ended, wakeMatched:", wakeMatchedRef.current, "enabled:", enabledRef.current);
+      }
+      // Don't restart if wake phrase was just matched (handing off to main STT)
+      if (wakeMatchedRef.current) {
+        if (process.env.NODE_ENV === "development") {
+          console.log("[WAKE] not restarting — wake phrase matched, handing off to main STT");
+        }
+        return;
+      }
       // Restart if still enabled and no permission error
-      if (enabledRef.current && error !== "麦克风权限被拒绝") {
+      if (enabledRef.current) {
         restartTimerRef.current = setTimeout(() => {
           if (enabledRef.current) {
+            if (process.env.NODE_ENV === "development") {
+              console.log("[WAKE] restarting recognition");
+            }
             startListening();
           }
-        }, 500);
+        }, 800);
       }
     };
 
@@ -101,10 +158,13 @@ export function useWakeWord({ enabled, onWakePhrase, isSupported }: Options) {
     } catch {
       setIsActive(false);
     }
-  }, [error]);
+  }, []);
 
   // Start/stop when enabled changes
   useEffect(() => {
+    if (process.env.NODE_ENV === "development") {
+      console.log("[WAKE] enabled changed:", enabled, "isSupported:", isSupported);
+    }
     if (enabled && isSupported) {
       startListening();
     } else {
