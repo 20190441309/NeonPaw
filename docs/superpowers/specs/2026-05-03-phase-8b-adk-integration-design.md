@@ -160,7 +160,7 @@ ADK_MODEL = os.getenv("ADK_MODEL", "gemini-2.0-flash")
 
 Add:
 ```
-google-adk>=1.0.0
+google-adk>=1.0,<2.0
 ```
 
 ---
