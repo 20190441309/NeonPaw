@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 from app.schemas import ChatRequest, ChatResponse
-from app.services.pet_brain import generate_response, fallback_response
+from app.agents.root_brain import generate_response, fallback_response
 
 router = APIRouter()
 
