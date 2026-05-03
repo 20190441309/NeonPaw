@@ -16,7 +16,7 @@ import { usePetState } from "@/hooks/usePetState";
 import { useMemory } from "@/hooks/useMemory";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
-import { useWakeWord } from "@/hooks/useWakeWord";
+import { useWakeWord, type WakeResult } from "@/hooks/useWakeWord";
 import { callChatApi } from "@/lib/api";
 
 export default function Home() {
@@ -29,6 +29,7 @@ export default function Home() {
   // Wake mode state — persisted, default OFF
   const [wakeWordEnabled, setWakeWordEnabled] = useState(false);
   const [wakeWordReady, setWakeWordReady] = useState(false);
+  const [wakeStatus, setWakeStatus] = useState<string | null>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem("neon_paw_wake_mode");
@@ -42,15 +43,17 @@ export default function Home() {
     }
   }, [wakeWordEnabled, wakeWordReady]);
 
-  // Refs for values needed inside the async callback but not as deps
+  // Refs for values needed inside async callbacks
   const petStateRef = useRef(pet.petState);
   const historyRef = useRef(pet.history);
   const memoriesRef = useRef(memory.memories);
   const sttStartRef = useRef(stt.start);
+  const sttStopRef = useRef(stt.stop);
   petStateRef.current = pet.petState;
   historyRef.current = pet.history;
   memoriesRef.current = memory.memories;
   sttStartRef.current = stt.start;
+  sttStopRef.current = stt.stop;
 
   // Shared voice interaction flow
   const startVoiceInteraction = useCallback((text: string) => {
@@ -73,6 +76,11 @@ export default function Home() {
 
       tts.speak(response.reply, () => {
         pet.setIdle();
+        // Resume wake listener after TTS finishes
+        if (wakeWordRef.current) {
+          wakeWordRef.current.resume();
+        }
+        setWakeStatus(null);
       });
     }).catch(() => {
       setIsConnected(false);
@@ -82,35 +90,75 @@ export default function Home() {
         content: "核心信号有点不稳定……但我还在这里。",
         timestamp: new Date().toISOString(),
       });
+      if (wakeWordRef.current) {
+        wakeWordRef.current.resume();
+      }
+      setWakeStatus(null);
     });
   }, [pet, tts, memory]);
 
-  // Wake phrase handler — wake pet then start voice flow
-  const handleWakePhrase = useCallback(() => {
-    if (pet.petState.mode === "sleeping") {
-      pet.wake();
+  // Handle wake result — inline command or follow-up listening
+  const handleWake = useCallback((result: WakeResult) => {
+    if (result.mode === "inline") {
+      // Inline command: send extracted text directly
+      setWakeStatus("PROCESSING COMMAND");
+      if (process.env.NODE_ENV === "development") {
+        console.log("[WAKE] inline command:", result.command);
+      }
+      // Wake pet if sleeping
+      if (pet.petState.mode === "sleeping") {
+        pet.wake();
+      }
+      setTimeout(() => {
+        startVoiceInteraction(result.command!);
+      }, 300);
+    } else {
+      // Follow-up listening: start main STT
+      setWakeStatus("LISTENING FOR COMMAND");
+      if (process.env.NODE_ENV === "development") {
+        console.log("[WAKE] follow-up mode, starting main STT");
+      }
+      // Wake pet if sleeping
+      if (pet.petState.mode === "sleeping") {
+        pet.wake();
+      }
+      setTimeout(() => {
+        pet.setListening();
+        sttStartRef.current((text: string) => {
+          setWakeStatus("PROCESSING COMMAND");
+          startVoiceInteraction(text);
+        });
+      }, 300);
     }
-    // Small delay to let pet transition to awake
-    setTimeout(() => {
-      pet.setListening();
-      sttStartRef.current((text: string) => {
-        startVoiceInteraction(text);
-      });
-    }, 300);
   }, [pet, startVoiceInteraction]);
 
   // Wake word hook — only active when enabled and pet is idle
   const isIdleForWake = pet.petState.mode === "sleeping" || pet.petState.mode === "awake";
   const wakeWord = useWakeWord({
     enabled: wakeWordEnabled && isIdleForWake && !stt.isListening,
-    onWakePhrase: handleWakePhrase,
+    onWake: handleWake,
     isSupported: stt.isSupported && wakeWordReady,
   });
+
+  // Keep a ref to wakeWord for use in callbacks
+  const wakeWordRef = useRef(wakeWord);
+  wakeWordRef.current = wakeWord;
+
+  // Pause wake listener when main STT starts (e.g. from click-to-talk)
+  useEffect(() => {
+    if (stt.isListening && wakeWordEnabled) {
+      wakeWord.pause();
+    }
+  }, [stt.isListening, wakeWordEnabled, wakeWord]);
 
   const handleVoiceClick = useCallback(() => {
     if (stt.isListening) {
       stt.stop();
       return;
+    }
+    // Pause wake listener during click-to-talk
+    if (wakeWordRef.current) {
+      wakeWordRef.current.pause();
     }
     pet.setListening();
     stt.start((text) => {
@@ -120,9 +168,14 @@ export default function Home() {
 
   const isError = pet.petState.mode === "error";
 
+  // Determine display status for the header
+  const displayMode = wakeStatus || pet.petState.mode.toUpperCase();
+
   const footerHint =
-    pet.petState.mode === "sleeping" ? (wakeWordEnabled ? "SAY \"NEON PAW\" TO WAKE" : "TAP SCREEN TO WAKE") :
-    pet.petState.mode === "awake" ? (wakeWordEnabled ? "WAKE WORD ACTIVE" : "TAP MICROPHONE TO TALK") :
+    pet.petState.mode === "sleeping" && wakeWordEnabled ? "SAY \"NEON PAW\" OR \"小爪醒醒\"" :
+    pet.petState.mode === "awake" && wakeWordEnabled ? (wakeStatus || "WAKE WORD ACTIVE") :
+    pet.petState.mode === "sleeping" ? "TAP SCREEN TO WAKE" :
+    pet.petState.mode === "awake" ? "TAP MICROPHONE TO TALK" :
     pet.petState.mode === "listening" ? "LISTENING..." :
     pet.petState.mode === "thinking" ? "PET BRAIN PROCESSING..." :
     pet.petState.mode === "speaking" ? "NEON PAW IS TALKING..." :
@@ -131,7 +184,7 @@ export default function Home() {
 
   return (
     <TerminalShell
-      statusLabel={pet.petState.mode.toUpperCase()}
+      statusLabel={displayMode}
       statusHint={<StatusHint trace={pet.trace} isConnected={isConnected} memoryCount={memory.memories.length} />}
       footerHint={footerHint}
       headerAction={
