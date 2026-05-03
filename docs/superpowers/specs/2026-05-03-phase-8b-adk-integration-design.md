@@ -1,7 +1,15 @@
 # Phase 8B Design: Google ADK Runtime Integration
 
+> **Status: CANCELLED — Replaced by Phase 8B-alt**
+>
+> This spec is preserved for reference only. The project uses a self-developed RootBrain
+> orchestrator with Python agent modules, not Google ADK runtime. ADK integration remains
+> a future option but is not required for the current architecture.
+>
+> See: `docs/superpowers/checkpoints/phase-8b-alt-rootbrain-checkpoint.md`
+
 **Date:** 2026-05-03
-**Status:** Approved
+**Status:** Cancelled (replaced by Phase 8B-alt)
 **Branch:** main
 **Depends on:** Phase 8A (modular agent brain)
 

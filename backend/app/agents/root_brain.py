@@ -1,8 +1,12 @@
-"""Root Brain — orchestrates all agent modules to produce a ChatResponse.
+"""Root Brain — self-developed multi-agent orchestrator.
 
-Two paths:
+Orchestrates seven agent modules (intent, emotion, action, state_delta,
+memory_decision, persona, root_brain) to produce a ChatResponse.
+Does not use Google ADK runtime; uses custom Python orchestration.
+
+Two execution paths:
   - Mock path (no LLM_API_KEY): runs all modules with rule-based logic.
-  - LLM path: calls DeepSeek, generates trace entries from the response.
+  - LLM path (with LLM_API_KEY): calls DeepSeek, validates JSON, infers trace.
 """
 
 from __future__ import annotations
