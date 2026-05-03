@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import json
 import re
 import logging
 from openai import AsyncOpenAI
-from app.schemas import ChatResponse, StateDelta, Memory, TraceEntry, PetState, ConversationMessage
+from app.schemas import ChatResponse, StateDelta, Memory, TraceEntry, PetState, ConversationMessage, MemoryEntry
 from app.services.prompts import SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
@@ -81,6 +83,7 @@ def _build_messages(
     message: str,
     pet_state: PetState,
     history: list[ConversationMessage],
+    memories: list[MemoryEntry] | None = None,
 ) -> list[dict[str, str]]:
     """Build the messages array for the LLM API call."""
     state_context = (
@@ -94,6 +97,13 @@ def _build_messages(
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "system", "content": state_context},
     ]
+
+    if memories:
+        mem_lines = "\n".join(f"- {m.content}" for m in memories)
+        messages.append({
+            "role": "system",
+            "content": f"[User Memories]\n你记得关于用户的以下信息，在回复中自然地引用：\n{mem_lines}",
+        })
 
     for msg in history[-10:]:
         messages.append({"role": msg.role, "content": msg.content})
@@ -151,6 +161,7 @@ async def _call_llm(
     message: str,
     pet_state: PetState,
     history: list[ConversationMessage],
+    memories: list[MemoryEntry] | None = None,
 ) -> ChatResponse:
     """Call DeepSeek-compatible OpenAI-style API and return validated ChatResponse."""
     from app import config
@@ -161,7 +172,7 @@ async def _call_llm(
         timeout=config.LLM_TIMEOUT,
     )
 
-    messages = _build_messages(message, pet_state, history)
+    messages = _build_messages(message, pet_state, history, memories)
 
     completion = await client.chat.completions.create(
         model=config.LLM_MODEL,
@@ -186,7 +197,10 @@ async def _call_llm(
 
 
 async def generate_response(
-    message: str, pet_state: PetState, history: list[ConversationMessage]
+    message: str,
+    pet_state: PetState,
+    history: list[ConversationMessage],
+    memories: list[MemoryEntry] | None = None,
 ) -> ChatResponse:
     from app import config
 
@@ -195,7 +209,7 @@ async def generate_response(
         return mock_response(message)
 
     try:
-        return await _call_llm(message, pet_state, history)
+        return await _call_llm(message, pet_state, history, memories)
     except Exception:
         logger.exception("LLM call failed, falling back to fallback response")
         return fallback_response()

@@ -69,10 +69,16 @@ export interface ChatResponse {
   trace: TraceEntry[];
 }
 
+export interface MemoryEntry {
+  content: string;
+  createdAt: string;
+}
+
 export interface ChatRequest {
   message: string;
   pet_state: PetState;
   conversation_history: ChatMessage[];
+  memories: MemoryEntry[];
 }
 
 export const DEFAULT_PET_STATE: PetState = {

@@ -36,10 +36,16 @@ class TraceEntry(BaseModel):
     message: str
 
 
+class MemoryEntry(BaseModel):
+    content: str
+    createdAt: str = ""
+
+
 class ChatRequest(BaseModel):
     message: str
     pet_state: PetState
     conversation_history: list[ConversationMessage] = []
+    memories: list[MemoryEntry] = []
 
 
 class ChatResponse(BaseModel):

@@ -12,6 +12,7 @@ async def chat(request: ChatRequest):
             message=request.message,
             pet_state=request.pet_state,
             history=request.conversation_history,
+            memories=request.memories,
         )
         return response
     except Exception:

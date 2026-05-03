@@ -7,14 +7,17 @@ import ChatTranscript from "@/components/ChatTranscript";
 import VoiceButton from "@/components/VoiceButton";
 import AgentTracePanel from "@/components/AgentTracePanel";
 import StatusHint from "@/components/StatusHint";
+import MemoryPanel from "@/components/MemoryPanel";
 import { useCallback, useRef, useState } from "react";
 import { usePetState } from "@/hooks/usePetState";
+import { useMemory } from "@/hooks/useMemory";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 import { callChatApi } from "@/lib/api";
 
 export default function Home() {
   const pet = usePetState();
+  const memory = useMemory();
   const stt = useSpeechRecognition();
   const tts = useSpeechSynthesis();
   const [isConnected, setIsConnected] = useState(true);
@@ -22,8 +25,10 @@ export default function Home() {
   // Refs for values needed inside the async callback but not as deps
   const petStateRef = useRef(pet.petState);
   const historyRef = useRef(pet.history);
+  const memoriesRef = useRef(memory.memories);
   petStateRef.current = pet.petState;
   historyRef.current = pet.history;
+  memoriesRef.current = memory.memories;
 
   const handleVoiceClick = useCallback(() => {
     if (stt.isListening) {
@@ -40,9 +45,13 @@ export default function Home() {
           message: text,
           pet_state: petStateRef.current,
           conversation_history: historyRef.current,
+          memories: memoriesRef.current,
         });
 
         setIsConnected(true);
+        if (response.memory.should_save && response.memory.content) {
+          memory.addMemory(response.memory.content);
+        }
         pet.addMessage({ role: "assistant", content: response.reply, timestamp: new Date().toISOString() });
         pet.applyResponse(response);
         pet.setSpeaking();
@@ -60,7 +69,7 @@ export default function Home() {
         });
       }
     });
-  }, [stt.isListening, stt.stop, stt.start, pet.setListening, pet.setThinking, pet.addMessage, pet.applyResponse, pet.setSpeaking, pet.setIdle, pet.setError, tts]);
+  }, [stt.isListening, stt.stop, stt.start, pet.setListening, pet.setThinking, pet.addMessage, pet.applyResponse, pet.setSpeaking, pet.setIdle, pet.setError, tts, memory.addMemory]);
 
   const isError = pet.petState.mode === "error";
 
@@ -84,6 +93,7 @@ export default function Home() {
       <ChatTranscript messages={pet.history} />
       <PetStatusPanel state={pet.petState} />
       <AgentTracePanel trace={pet.trace} />
+      <MemoryPanel memories={memory.memories} onRemove={memory.removeMemory} />
       {stt.interimTranscript && (
         <div className="text-xs mt-2 opacity-50 text-center glow-subtle">
           {stt.interimTranscript}...
