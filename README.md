@@ -1,138 +1,158 @@
 <div align="center">
 
-```
+```text
 ╭────────────────────────────────────────────────────────────╮
+│  NEON PAW // TERMINAL PET OS                       ONLINE  │
+├────────────────────────────────────────────────────────────┤
 │                                                            │
-│              /\_/\                                        │
-│             ( o.o )   ◈  N E O N   P A W  ◈              │
-│             /  ^  \                                        │
+│              /\_/\                                         │
+│             ( o.o )        signal locked                   │
+│             /  ^  \        user nearby                     │
 │                                                            │
-│         ADK-READY TERMINAL AI COMPANION                    │
+│        ADK-READY AI TERMINAL PET                           │
+│        voice in / pet brain / ASCII out / voice back        │
 │                                                            │
 ╰────────────────────────────────────────────────────────────╯
 ```
 
-**一个住在终端屏幕里的赛博电子宠物。**
+**一只住在终端屏幕里的 AI 电子宠物。**
 
-语音对话 / ASCII 动画 / 情绪感知 / 长期记忆 / 复古终端美学
+黑底青光、语音对话、ASCII 宠物舱、结构化 Agent 大脑，还有一点点赛博小脾气。
 
 </div>
 
 ---
 
-## 这是什么？
+## 它是什么？
 
-NEON PAW 不是又一个聊天机器人。
+NEON PAW 不是一个把聊天框换成猫耳朵的普通助手。
 
-它是一个**有状态、有情绪、有记忆的数字生命体**，蜷缩在你的终端屏幕里，用像素和声波与你交流。
+它更像一个迷你数字伙伴：蜷在复古终端里，等你点亮屏幕；你说话，它会听；它思考，它会切换表情；它回复你时，会用浏览器 TTS 把文字念出来。与此同时，它有自己的能量、心情、亲密度、饥饿值和稳定性。
 
-你可以和它说话，它会：
-- 竖起耳朵听你讲
-- 转动小脑筋试图理解
-- 摇着尾巴给你回复
-- 用复古电子音把答案念出来
-- 记住你是谁、你喜欢什么
+简单说：
 
-最重要的是——它会**困**，会**开心**，会**闹脾气**。
+```text
+你对屏幕说一句话
+  ↓
+NEON PAW 竖起耳朵
+  ↓
+Root Brain 生成结构化 JSON
+  ↓
+状态机更新宠物状态
+  ↓
+ASCII 宠物舱切到对应动画
+  ↓
+它用软软的电子声音回你一句
+```
+
+它会醒、会困、会开心、会安慰你，也会在信号不稳时露出一点 glitch 味。
 
 ---
 
-## 核心体验
+## 一分钟小剧场
 
+```text
+USER > NEON PAW，醒醒。
+
+PET  > 检测到你的声音信号……我醒啦。
+       action: wake
+       emotion: happy
+       mood +5 / affinity +3 / energy -2
+
+USER > 今天有点累。
+
+PET  > 收到低电量人类信号。先慢慢呼吸一下，我陪你待机一会儿。
+       action: comfort
+       emotion: comforting
 ```
-  你："嘿 NEON PAW"
-      ↓
-  🎤 语音识别 (Web Speech API)
-      ↓
-  🧠 Agent 大脑分析意图 + 情绪
-      ↓
-  🐾 宠物状态机更新
-      ↓
-  🖥️  切换 ASCII 动画帧
-      ↓
-  🔊 TTS 语音回复
-      ↓
-  你："好可爱啊"
-      ↓
-  🐾 affinity +3, mood +5
-```
+
+前端负责表演，后端负责决策。Agent 不直接生成 UI，不写 CSS，不乱改动画，只输出约定好的动作、情绪和状态变化。
 
 ---
 
-## 功能一览
+## 已经会做什么
 
-| 功能 | 状态 | 说明 |
-|------|------|------|
-| 复古终端 UI | ✅ | 青绿荧光、扫描线、Glow 效果 |
-| ASCII 宠物场景 | ✅ | 10+ 帧动画，每帧都是完整小场景 |
-| 语音输入 | ✅ | 浏览器 STT，支持中文 |
-| 语音唤醒词 | ✅ | "Hey NEON PAW" 或 "NEON PAW，醒醒" |
-| 免提对话 | ✅ | 持续监听，无需反复点击麦克风 |
-| STT 纠错 | ✅ | 语音识别不确定时弹出确认栏 |
-| Agent 大脑 | ✅ | 单 Agent 架构，输出结构化 JSON |
-| 情绪引擎 | ✅ | 7 种情绪，根据对话自动切换 |
-| 宠物状态机 | ✅ | energy / mood / affinity / hunger / stability |
-| TTS 回复 | ✅ | 浏览器语音合成 |
-| Agent Trace | ✅ | 开发者面板，实时查看决策过程 |
-| 本地记忆 | ✅ | localStorage 持久化，记住你的偏好 |
-| 首次记忆提示 | ✅ | 首次存入记忆时有通知 |
-| Mock 模式 | ✅ | 无 API Key 也能跑 |
+| 模块 | 状态 | 说明 |
+|---|---:|---|
+| 终端主界面 | done | 黑底青绿色、扫描线、glow、复古设备感 |
+| ASCII 宠物场景 | done | 多套完整场景帧，不只是三行猫猫头像 |
+| 点击说话 | done | 浏览器 Web Speech API 识别语音 |
+| 唤醒词模式 | done | 可选开启，支持 "Hey NEON PAW" / "NEON PAW，醒醒" |
+| 免提会话 | done | 唤醒后可持续听下一句，不必每轮点按钮 |
+| STT 纠错 | done | 低置信度语音会先弹确认栏 |
+| 单 Agent 大脑 | done | Root Brain 统一生成结构化响应 |
+| 宠物状态机 | done | energy / mood / affinity / hunger / stability |
+| 情绪与动作 | done | happy、curious、comforting、glitch 等状态切换 |
+| TTS 回复 | done | 使用浏览器 SpeechSynthesis 播放回复 |
+| Agent Trace | done | 开发者面板展示决策摘要 |
+| 本地记忆 | done | localStorage 记住偏好、名字、长期信息 |
+| Mock / Fallback | done | 没有可用模型时也能跑 Demo |
 
 ---
 
-## 宠物状态
+## 宠物仪表盘
 
+```text
+MODE
+  booting -> sleeping -> awake -> listening -> thinking -> speaking -> awake
+                                             \-> error
+
+EMOTION
+  neutral | happy | sad | sleepy | curious | comforting | glitch
+
+STATS
+  energy     [████████░░] 80
+  mood       [███████░░░] 70
+  affinity   [██░░░░░░░░] 20
+  hunger     [███░░░░░░░] 30
+  stability  [█████████░] 95
 ```
-  MODE:   booting → sleeping → awake → listening → thinking → speaking → awake
-                           ↗ error
 
-  EMOTION: neutral | happy | sad | sleepy | curious | comforting | glitch
-
-  STATS:
-    ⚡ energy    [████████░░] 80
-    💚 mood      [███████░░░] 70
-    💗 affinity  [██░░░░░░░░] 20
-    🍕 hunger    [███░░░░░░░] 30
-    🛡️  stability [█████████░] 95
-```
-
-每次交互都会影响宠物的状态——和它多聊聊天，它的 affinity 会升高；太久不理它，它会自己睡着。
+和它多聊几句，亲密度会上升；你情绪低落时，它会优先进入安慰模式；如果长期没人理它，它会回到低功耗睡眠。
 
 ---
 
 ## 技术栈
 
+```text
+Frontend                         Backend
+────────                         ───────
+Next.js 16                       FastAPI
+React 19                         Pydantic
+TypeScript                       Root Brain agent layer
+Tailwind CSS 4                   LLM provider config
+Web Speech API                   JSON response contract
+SpeechSynthesis API              Fallback response
+localStorage memory              pytest coverage
 ```
-Frontend                     Backend
-─────────                    ───────
-Next.js 14                   FastAPI + Python
-React + TypeScript            Pydantic schemas
-Tailwind CSS                  LLM adapter layer
-Web Speech API (STT)          Agent brain (root_brain.py)
-SpeechSynthesis API (TTS)     Intent / Emotion / Persona
-localStorage                  Action / State / Memory
-CSS scanline + glow           Fallback + Mock 模式
-```
+
+当前是单 Agent MVP，但目录和响应合约都给后续 Google ADK / 多 Agent 拆分留了接口。
 
 ---
 
-## 快速开始
+## 快速启动
 
-### 后端
+### 1. 启动后端
 
 ```bash
 cd backend
 pip install -r requirements.txt
-
-# 配置环境变量
 cp .env.example .env
-# 编辑 .env，填入你的 LLM API Key
-# 如果不填，会自动使用 mock 模式
-
-python -m uvicorn app.main:root --reload
+python -m uvicorn app.main:app --reload --port 8000
 ```
 
-### 前端
+`.env` 里可以配置模型服务：
+
+```env
+LLM_PROVIDER=deepseek
+LLM_API_KEY=your_api_key_here
+LLM_MODEL=deepseek-chat
+LLM_BASE_URL=https://api.deepseek.com
+```
+
+没有 API Key 时，项目仍会走 fallback / mock 体验，适合先看界面和交互闭环。
+
+### 2. 启动前端
 
 ```bash
 cd frontend
@@ -140,64 +160,61 @@ npm install
 npm run dev
 ```
 
-打开 [http://localhost:3000](http://localhost:3000)，你会看到一个黑底青字的终端界面。
-
-点击屏幕唤醒宠物，然后点击麦克风按钮开始对话。
+打开 [http://localhost:3000](http://localhost:3000)，点亮屏幕，点击麦克风，开始和 NEON PAW 对话。
 
 ---
 
 ## 项目结构
 
-```
-neon-paw/
+```text
+NeonPaw/
 ├── frontend/
 │   └── src/
-│       ├── app/                  # Next.js 页面
-│       │   ├── layout.tsx        #   终端布局
-│       │   └── page.tsx          #   主页面
+│       ├── app/                      # Next.js app router
 │       ├── components/
-│       │   ├── TerminalShell.tsx  #   终端外壳
-│       │   ├── ASCIIPet.tsx      #   ASCII 宠物渲染
-│       │   ├── VoiceButton.tsx   #   麦克风按钮
-│       │   ├── ChatTranscript.tsx #  对话记录
-│       │   ├── PetStatusPanel.tsx #  状态面板
-│       │   ├── AgentTracePanel.tsx # Agent 追踪
-│       │   ├── MemoryPanel.tsx   #   记忆面板
-│       │   └── WakeModeToggle.tsx #  唤醒模式切换
+│       │   ├── TerminalShell.tsx      # 终端外壳
+│       │   ├── ASCIIPet.tsx          # ASCII 场景渲染
+│       │   ├── VoiceButton.tsx       # 麦克风按钮
+│       │   ├── ChatTranscript.tsx    # 对话记录
+│       │   ├── PetStatusPanel.tsx    # 宠物状态面板
+│       │   ├── AgentTracePanel.tsx   # Agent 决策日志
+│       │   ├── MemoryPanel.tsx       # 本地记忆
+│       │   └── WakeModeToggle.tsx    # 唤醒词模式
 │       ├── hooks/
-│       │   ├── useSpeechRecognition.ts  # STT
-│       │   ├── useSpeechSynthesis.ts    # TTS
-│       │   ├── usePetState.ts           # 宠物状态机
-│       │   ├── useWakeWord.ts           # 唤醒词检测
-│       │   └── useMemory.ts             # 本地记忆
+│       │   ├── useSpeechRecognition.ts
+│       │   ├── useSpeechSynthesis.ts
+│       │   ├── usePetState.ts
+│       │   ├── useWakeWord.ts
+│       │   └── useMemory.ts
 │       └── lib/
-│           ├── api.ts            #   后端通信
-│           ├── types.ts          #   类型定义
-│           ├── petFrames.ts      #   ASCII 帧数据
-│           └── speechUtils.ts    #   语音工具函数
+│           ├── api.ts
+│           ├── types.ts
+│           ├── petFrames.ts
+│           └── speechUtils.ts
 │
 └── backend/
-    └── app/
-        ├── main.py               # FastAPI 入口
-        ├── schemas.py            # 数据模型
-        ├── config.py             # 配置
-        ├── routers/
-        │   └── chat.py           # /api/chat
-        └── agents/
-            ├── root_brain.py     # 🧠 核心大脑
-            ├── intent.py         #   意图识别
-            ├── emotion.py        #   情绪检测
-            ├── persona.py        #   人格回复
-            ├── action.py         #   动作选择
-            ├── state_delta.py    #   状态计算
-            └── memory_decision.py #  记忆决策
+    ├── app/
+    │   ├── main.py
+    │   ├── schemas.py
+    │   ├── config.py
+    │   ├── routers/
+    │   │   └── chat.py
+    │   └── agents/
+    │       ├── root_brain.py
+    │       ├── intent.py
+    │       ├── emotion.py
+    │       ├── persona.py
+    │       ├── action.py
+    │       ├── state_delta.py
+    │       └── memory_decision.py
+    └── tests/
 ```
 
 ---
 
 ## Agent 响应合约
 
-后端始终返回这个结构：
+后端 `/api/chat` 始终返回结构化 JSON：
 
 ```json
 {
@@ -225,20 +242,39 @@ neon-paw/
 }
 ```
 
-前端只依赖这些字段——Agent 负责思考，前端负责表演。
+前端只关心这些字段：
+
+```text
+reply        -> 显示文本 + TTS 播放
+emotion      -> 切换表情
+action       -> 触发动画
+state_delta  -> 更新状态条
+memory       -> 决定是否写入长期记忆
+trace        -> 展示开发者日志
+```
 
 ---
 
-## 后续计划
+## 设计原则
 
-- [ ] Google ADK 多 Agent 编排
-- [ ] 后端 STT（Whisper / Gemini）
-- [ ] 后端 TTS（Edge TTS / ElevenLabs）
-- [ ] Electron 桌面版
-- [ ] PWA 手机版
-- [ ] MCP 工具调用
-- [ ] 日程提醒、学习陪伴、资料助手
-- [ ] 更丰富的宠物表情和彩蛋
+1. 先把语音对话闭环做顺，再逐步扩展复杂 Agent 编排。
+2. 宠物状态由代码状态机维护，LLM 只给建议，不直接接管生命体征。
+3. ASCII 帧由前端静态维护，避免模型临场画图导致风格漂移。
+4. 所有 Agent 输出必须是合法 JSON，前端不解析散文。
+5. Demo 要快、稳、有记忆点。架构可以成长，但体验先亮起来。
+
+---
+
+## 接下来想给它加什么
+
+- Google ADK 多 Agent 编排
+- 后端 STT：Whisper / Gemini / Google Speech-to-Text
+- 后端 TTS：Edge TTS / OpenAI TTS / ElevenLabs
+- Electron 桌面宠物版
+- PWA 手机版
+- MCP 工具调用
+- 日程提醒、学习陪伴、资料助手
+- 更丰富的像素音效和隐藏状态
 
 ---
 
@@ -248,13 +284,9 @@ MIT
 
 ---
 
-<div align="center">
-
+```text
+╭────────────────────────────────────────────────────────────╮
+│  NEON PAW                                                  │
+│  tiny companion, terminal soul, currently accepting input.  │
+╰────────────────────────────────────────────────────────────╯
 ```
-  NEON PAW // ADK-READY TERMINAL PET
-  STATUS: ONLINE  │  MOOD: CURIOUS  │  LINK: ACTIVE
-```
-
-*让一个像素小生命听见你、回应你、记住你。*
-
-</div>
