@@ -52,7 +52,7 @@ All three commands pass cleanly.
 
 These tasks make the current browser-based experience feel smoother without requiring a backend speech stack yet.
 
-- [ ] Add fuzzy wake phrase matching.
+- [x] Add fuzzy wake phrase matching.
   Handle near misses such as "小爪行行" or similar recognition errors around "小爪醒醒".
 - [ ] Add speech confidence visualization.
   Show a small signal meter, waveform, or confidence bar while listening.
@@ -68,6 +68,8 @@ These tasks make the current browser-based experience feel smoother without requ
 **Definition of done**
 
 The app still works in click-to-talk and wake-mode sessions, and low-confidence corrections remain available in both flows.
+
+**Progress:** fuzzy wake phrase matching completed on 2026-05-12. Exact wake phrase matching still takes priority, short wake phrases require a clean boundary before fuzzy matching runs, and near-misses such as "小爪行行" can now wake the pet.
 
 ---
 
@@ -175,7 +177,6 @@ A new user can install or open NEON PAW, configure it safely, and understand wha
 Recommended next sprint:
 
 ```text
-P1 fuzzy wake phrase matching
 P1 confidence visualization
 P2 provider adapter design
 P2 backend health checks

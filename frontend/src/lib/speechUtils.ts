@@ -1,15 +1,6 @@
 // Speech utility functions for Phase 10D — STT accuracy & correction UX
 
-const WAKE_PHRASES = [
-  "小爪醒醒",
-  "小抓醒醒",
-  "小早醒醒",
-  "小爪",
-  "小抓",
-  "小早",
-  "醒醒",
-  "neon paw",
-];
+import { splitWakePhraseAndCommand } from "./wakePhrases";
 
 const FILLER_WORDS = new Set([
   "啊", "嗯", "呃", "喂", "哦", "呀", "吧", "呢", "嘛", "哈",
@@ -39,18 +30,8 @@ export function splitWakeWordAndCommand(text: string): {
   command: string;
   raw: string;
 } {
-  const lower = text.toLowerCase();
-
-  for (const phrase of WAKE_PHRASES) {
-    const idx = lower.indexOf(phrase);
-    if (idx !== -1) {
-      const after = text.slice(idx + phrase.length);
-      const command = after.replace(/^[,，。!！?？、；;：:\s]+/, "").trim();
-      return { hasWakeWord: true, command, raw: text };
-    }
-  }
-
-  return { hasWakeWord: false, command: "", raw: text };
+  const match = splitWakePhraseAndCommand(text);
+  return { hasWakeWord: match.hasWakeWord, command: match.command, raw: match.raw };
 }
 
 /**

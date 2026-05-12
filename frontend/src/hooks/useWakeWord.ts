@@ -7,17 +7,7 @@ import {
   type SpeechRecognitionEventLike,
   type SpeechRecognitionLike,
 } from "@/lib/speechRecognitionTypes";
-
-const WAKE_PHRASES = [
-  "小爪醒醒",
-  "小抓醒醒",
-  "小早醒醒",
-  "小爪",
-  "小抓",
-  "小早",
-  "醒醒",
-  "neon paw",
-];
+import { normalizeWakeText, splitWakePhraseAndCommand } from "@/lib/wakePhrases";
 
 const STOP_PHRASES = ["先这样", "不用了", "结束对话", "退出", "stop", "sleep"];
 
@@ -27,53 +17,57 @@ const COMMAND_MAX_RETRIES = 3;
 const SESSION_MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 600;
 
-function normalizeText(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[\s\.,!?;:'"，。！？；：""''、·\-_~`@#\$%\^&\*\(\)\[\]\{\}\/\\|<>=+]/g, "")
-    .trim();
-}
-
-function normalizeForStrip(text: string): string {
-  return text.replace(/^[,，。!！?？\s]+/, "").trim();
-}
-
 export interface WakeResult {
   mode: "inline" | "followup";
   command?: string;
+  isFuzzy?: boolean;
+  phrase?: string;
+  distance?: number;
 }
 
 function extractCommand(transcript: string): WakeResult | null {
-  const lower = transcript.toLowerCase();
+  const match = splitWakePhraseAndCommand(transcript);
+  if (!match.hasWakeWord) return null;
 
-  for (const phrase of WAKE_PHRASES) {
-    const idx = lower.indexOf(phrase);
-    if (idx !== -1) {
-      const after = transcript.slice(idx + phrase.length);
-      const command = normalizeForStrip(after);
-      if (command.length > 0) {
-        if (process.env.NODE_ENV === "development") {
-          console.log("[WAKE] inline command mode, extracted command:", command);
-        }
-        return { mode: "inline", command };
-      }
-      if (process.env.NODE_ENV === "development") {
-        console.log("[WAKE] follow-up listening mode (wake phrase only)");
-      }
-      return { mode: "followup" };
-    }
-  }
-
-  const normalized = normalizeText(transcript);
-  const matched = WAKE_PHRASES.some((phrase) => normalized.includes(phrase));
-  if (matched) {
+  if (match.command.length > 0) {
     if (process.env.NODE_ENV === "development") {
-      console.log("[WAKE] follow-up listening mode (normalized match)");
+      console.log(
+        "[WAKE] inline command mode, extracted command:",
+        match.command,
+        "fuzzy:",
+        match.isFuzzy,
+        "phrase:",
+        match.phrase ?? "(unknown)",
+        "distance:",
+        match.distance,
+      );
     }
-    return { mode: "followup" };
+    return {
+      mode: "inline",
+      command: match.command,
+      isFuzzy: match.isFuzzy,
+      phrase: match.phrase,
+      distance: match.distance,
+    };
   }
 
-  return null;
+  if (process.env.NODE_ENV === "development") {
+    console.log(
+      "[WAKE] follow-up listening mode",
+      "fuzzy:",
+      match.isFuzzy,
+      "phrase:",
+      match.phrase ?? "(unknown)",
+      "distance:",
+      match.distance,
+    );
+  }
+  return {
+    mode: "followup",
+    isFuzzy: match.isFuzzy,
+    phrase: match.phrase,
+    distance: match.distance,
+  };
 }
 
 function isStopPhrase(text: string): boolean {
@@ -244,7 +238,7 @@ export function useWakeWord({ enabled, onWake, onCommand, onCommandTimeout, isSu
           const transcript = event.results[i][0].transcript;
           if (process.env.NODE_ENV === "development") {
             console.log("[WAKE] raw transcript:", transcript);
-            console.log("[WAKE] normalized:", normalizeText(transcript));
+            console.log("[WAKE] normalized:", normalizeWakeText(transcript));
           }
           const result = extractCommand(transcript);
           if (result) {
