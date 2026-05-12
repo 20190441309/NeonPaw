@@ -267,14 +267,11 @@ trace        -> 展示开发者日志
 
 ## 接下来想给它加什么
 
-- Google ADK 多 Agent 编排
-- 后端 STT：Whisper / Gemini / Google Speech-to-Text
-- 后端 TTS：Edge TTS / OpenAI TTS / ElevenLabs
-- Electron 桌面宠物版
-- PWA 手机版
-- MCP 工具调用
-- 日程提醒、学习陪伴、资料助手
-- 更丰富的像素音效和隐藏状态
+详细优先级已经整理到 [Development Roadmap](docs/roadmap.md)。
+
+P0 地基收尾已完成：lint、Next.js 构建警告、语音类型、文档一致性。<br>
+下一步增强体验：唤醒词模糊匹配、语音置信度可视化、后端 STT/TTS、LLM Provider 适配层。<br>
+长期扩展方向：服务端记忆、Google ADK 多 Agent、MCP 工具调用、PWA、Electron 桌面宠物版。
 
 ---
 

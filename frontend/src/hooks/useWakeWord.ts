@@ -1,6 +1,12 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import {
+  getSpeechRecognitionConstructor,
+  type SpeechRecognitionErrorEventLike,
+  type SpeechRecognitionEventLike,
+  type SpeechRecognitionLike,
+} from "@/lib/speechRecognitionTypes";
 
 const WAKE_PHRASES = [
   "小爪醒醒",
@@ -85,13 +91,15 @@ interface Options {
 
 export type WakeMode = "idle" | "wake_listening" | "command_listening" | "session_listening";
 
+type StartListeningFn = () => void;
+
 export function useWakeWord({ enabled, onWake, onCommand, onCommandTimeout, isSupported }: Options) {
   const [isActive, setIsActive] = useState(false);
   const [mode, setMode] = useState<WakeMode>("idle");
   const [error, setError] = useState<string | null>(null);
   const [sessionActive, setSessionActive] = useState(false);
 
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const enabledRef = useRef(enabled);
   const onWakeRef = useRef(onWake);
   const onCommandRef = useRef(onCommand);
@@ -112,11 +120,17 @@ export function useWakeWord({ enabled, onWake, onCommand, onCommandTimeout, isSu
   const emptyRetriesRef = useRef(0);
   const commandRetriesRef = useRef(0);
   const sessionRetriesRef = useRef(0);
+  const startWakeListeningRef = useRef<StartListeningFn>(() => {});
+  const startCommandCaptureRef = useRef<StartListeningFn>(() => {});
+  const startSessionListeningRef = useRef<StartListeningFn>(() => {});
+  const stopListeningRef = useRef<StartListeningFn>(() => {});
 
-  enabledRef.current = enabled;
-  onWakeRef.current = onWake;
-  onCommandRef.current = onCommand;
-  onCommandTimeoutRef.current = onCommandTimeout;
+  useEffect(() => {
+    enabledRef.current = enabled;
+    onWakeRef.current = onWake;
+    onCommandRef.current = onCommand;
+    onCommandTimeoutRef.current = onCommandTimeout;
+  }, [enabled, onWake, onCommand, onCommandTimeout]);
 
   // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -170,12 +184,10 @@ export function useWakeWord({ enabled, onWake, onCommand, onCommandTimeout, isSu
     lang: string,
     continuous: boolean,
     interimResults: boolean,
-    onresult: (event: any) => void,
+    onresult: (event: SpeechRecognitionEventLike) => void,
     onstart?: () => void,
   ) => {
-    const Ctor =
-      (window as any).SpeechRecognition ||
-      (window as any).webkitSpeechRecognition;
+    const Ctor = getSpeechRecognitionConstructor();
     if (!Ctor) return null;
 
     const r = new Ctor();
@@ -191,7 +203,7 @@ export function useWakeWord({ enabled, onWake, onCommand, onCommandTimeout, isSu
 
     r.onresult = onresult;
 
-    r.onerror = (event: any) => {
+    r.onerror = (event: SpeechRecognitionErrorEventLike) => {
       if (process.env.NODE_ENV === "development") {
         console.log("[WAKE] recognition error:", event.error, "mode:", modeRef.current);
       }
@@ -225,7 +237,7 @@ export function useWakeWord({ enabled, onWake, onCommand, onCommandTimeout, isSu
 
     const recognition = createRecognition(
       "zh-CN", true, true,
-      (event: any) => {
+      (event: SpeechRecognitionEventLike) => {
         if (pausedRef.current || modeRef.current !== "wake_listening") return;
 
         for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -251,7 +263,7 @@ export function useWakeWord({ enabled, onWake, onCommand, onCommandTimeout, isSu
               onWakeRef.current(result);
               setTimeout(() => {
                 if (enabledRef.current && !pausedRef.current && modeRef.current === "command_listening") {
-                  startCommandCapture();
+                  startCommandCaptureRef.current();
                 }
               }, 300);
             }
@@ -281,7 +293,7 @@ export function useWakeWord({ enabled, onWake, onCommand, onCommandTimeout, isSu
         }
         restartTimerRef.current = setTimeout(() => {
           if (enabledRef.current && !pausedRef.current && modeRef.current === "wake_listening") {
-            startWakeListening();
+            startWakeListeningRef.current();
           }
         }, delay);
       }
@@ -289,7 +301,7 @@ export function useWakeWord({ enabled, onWake, onCommand, onCommandTimeout, isSu
 
     recognitionRef.current = recognition;
     try { recognition.start(); } catch { setIsActive(false); }
-  }, [stopRecognition, clearAllTimers, setModeState, createRecognition]);
+  }, [stopRecognition, clearAllTimers, setModeState, setSessionState, createRecognition]);
 
   // ── Command Capture (one-shot after wake phrase) ────────────────────
 
@@ -312,14 +324,14 @@ export function useWakeWord({ enabled, onWake, onCommand, onCommandTimeout, isSu
         setModeState("idle");
         onCommandTimeoutRef.current();
         if (enabledRef.current && !pausedRef.current) {
-          setTimeout(() => startWakeListening(), 300);
+          setTimeout(() => startWakeListeningRef.current(), 300);
         }
       }
     }, COMMAND_TIMEOUT_MS);
 
     const recognition = createRecognition(
       "zh-CN", false, false,
-      (event: any) => {
+      (event: SpeechRecognitionEventLike) => {
         if (pausedRef.current || modeRef.current !== "command_listening") return;
 
         for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -362,7 +374,7 @@ export function useWakeWord({ enabled, onWake, onCommand, onCommandTimeout, isSu
         }
         commandRetryTimerRef.current = setTimeout(() => {
           if (enabledRef.current && !pausedRef.current && modeRef.current === "command_listening") {
-            startCommandCapture();
+            startCommandCaptureRef.current();
           }
         }, RETRY_DELAY_MS);
       }
@@ -370,7 +382,7 @@ export function useWakeWord({ enabled, onWake, onCommand, onCommandTimeout, isSu
 
     recognitionRef.current = recognition;
     try { recognition.start(); } catch { setIsActive(false); }
-  }, [stopRecognition, clearAllTimers, setModeState, setSessionState, createRecognition, startWakeListening]);
+  }, [stopRecognition, clearAllTimers, setModeState, setSessionState, createRecognition]);
 
   // ── Session Listening (continuous conversation) ─────────────────────
 
@@ -396,14 +408,14 @@ export function useWakeWord({ enabled, onWake, onCommand, onCommandTimeout, isSu
         setModeState("idle");
         onCommandTimeoutRef.current();
         if (enabledRef.current && !pausedRef.current) {
-          setTimeout(() => startWakeListening(), 300);
+          setTimeout(() => startWakeListeningRef.current(), 300);
         }
       }
     }, SESSION_TIMEOUT_MS);
 
     const recognition = createRecognition(
       "zh-CN", false, false,
-      (event: any) => {
+      (event: SpeechRecognitionEventLike) => {
         if (pausedRef.current || modeRef.current !== "session_listening") return;
 
         for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -433,7 +445,7 @@ export function useWakeWord({ enabled, onWake, onCommand, onCommandTimeout, isSu
                 // Resume wake listening after a brief pause
                 setTimeout(() => {
                   if (enabledRef.current && !pausedRef.current) {
-                    startWakeListening();
+                    startWakeListeningRef.current();
                   }
                 }, 500);
                 return;
@@ -474,7 +486,7 @@ export function useWakeWord({ enabled, onWake, onCommand, onCommandTimeout, isSu
         }
         sessionRetryTimerRef.current = setTimeout(() => {
           if (enabledRef.current && !pausedRef.current && modeRef.current === "session_listening") {
-            startSessionListening();
+            startSessionListeningRef.current();
           }
         }, RETRY_DELAY_MS);
       } else {
@@ -486,14 +498,14 @@ export function useWakeWord({ enabled, onWake, onCommand, onCommandTimeout, isSu
         setSessionState(false);
         setModeState("idle");
         if (enabledRef.current && !pausedRef.current) {
-          setTimeout(() => startWakeListening(), 500);
+          setTimeout(() => startWakeListeningRef.current(), 500);
         }
       }
     };
 
     recognitionRef.current = recognition;
     try { recognition.start(); } catch { setIsActive(false); }
-  }, [stopRecognition, clearAllTimers, setModeState, setSessionState, createRecognition, startWakeListening]);
+  }, [stopRecognition, clearAllTimers, setModeState, setSessionState, createRecognition]);
 
   // ── Pause / Resume ──────────────────────────────────────────────────
 
@@ -517,12 +529,19 @@ export function useWakeWord({ enabled, onWake, onCommand, onCommandTimeout, isSu
         console.log("[WAKE] resumed, resume target:", target);
       }
       if (sessionActiveRef.current) {
-        startSessionListening();
+        startSessionListeningRef.current();
       } else {
-        startWakeListening();
+        startWakeListeningRef.current();
       }
     }
-  }, [startWakeListening, startSessionListening, isSupported]);
+  }, [isSupported]);
+
+  useEffect(() => {
+    startWakeListeningRef.current = startWakeListening;
+    startCommandCaptureRef.current = startCommandCapture;
+    startSessionListeningRef.current = startSessionListening;
+    stopListeningRef.current = stopListening;
+  }, [startWakeListening, startCommandCapture, startSessionListening, stopListening]);
 
   // ── Lifecycle ───────────────────────────────────────────────────────
 
@@ -532,12 +551,14 @@ export function useWakeWord({ enabled, onWake, onCommand, onCommandTimeout, isSu
     }
     if (enabled && isSupported) {
       pausedRef.current = false;
-      startWakeListening();
+      startWakeListeningRef.current();
     } else {
-      stopListening();
+      queueMicrotask(() => stopListeningRef.current());
     }
-    return () => stopListening();
-  }, [enabled, isSupported, startWakeListening, stopListening]);
+    return () => {
+      stopListeningRef.current();
+    };
+  }, [enabled, isSupported]);
 
   return { isActive, mode, error, sessionActive, pause, resume };
 }

@@ -2,6 +2,13 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { normalizeSpeechText, isLowConfidenceSpeech } from "@/lib/speechUtils";
+import {
+  getSpeechRecognitionConstructor,
+  hasSpeechRecognitionSupport,
+  type SpeechRecognitionErrorEventLike,
+  type SpeechRecognitionEventLike,
+  type SpeechRecognitionLike,
+} from "@/lib/speechRecognitionTypes";
 
 export function useSpeechRecognition() {
   const [isListening, setIsListening] = useState(false);
@@ -13,7 +20,7 @@ export function useSpeechRecognition() {
   // Default true so SSR and initial client render match.
   // Updated to real value after hydration in useEffect.
   const [isSupported, setIsSupported] = useState(true);
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
   // Refs for callback access inside onresult
   const onResultRef = useRef<((text: string, confidence: number | null) => void) | null>(null);
@@ -22,15 +29,14 @@ export function useSpeechRecognition() {
   const lastMessageTimeRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
-    const supported =
-      typeof window !== "undefined" &&
-      ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
-    setIsSupported(supported);
+    const supported = hasSpeechRecognitionSupport();
+    queueMicrotask(() => {
+      setIsSupported(supported);
+    });
 
     if (process.env.NODE_ENV === "development") {
       console.log("[STT] typeof window:", typeof window);
-      console.log("[STT] window.SpeechRecognition:", typeof window !== "undefined" && Boolean((window as any).SpeechRecognition));
-      console.log("[STT] window.webkitSpeechRecognition:", typeof window !== "undefined" && Boolean((window as any).webkitSpeechRecognition));
+      console.log("[STT] SpeechRecognition supported:", supported);
       console.log("[STT] isSupported:", supported);
     }
   }, []);
@@ -46,9 +52,7 @@ export function useSpeechRecognition() {
         return;
       }
 
-      const SpeechRecognitionCtor =
-        (window as any).SpeechRecognition ||
-        (window as any).webkitSpeechRecognition;
+      const SpeechRecognitionCtor = getSpeechRecognitionConstructor();
 
       if (!SpeechRecognitionCtor) {
         setError("语音识别需要 Chrome 或 Edge 浏览器");
@@ -71,7 +75,7 @@ export function useSpeechRecognition() {
         setError(null);
       };
 
-      recognition.onresult = (event: any) => {
+      recognition.onresult = (event: SpeechRecognitionEventLike) => {
         let interim = "";
         let finalText = "";
         let finalConfidence: number | null = null;
@@ -126,7 +130,7 @@ export function useSpeechRecognition() {
         }
       };
 
-      recognition.onerror = (event: any) => {
+      recognition.onerror = (event: SpeechRecognitionErrorEventLike) => {
         if (process.env.NODE_ENV === "development") {
           console.log("[STT] recognition error:", event.error);
         }

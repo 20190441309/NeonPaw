@@ -12,7 +12,7 @@ import MemoryNotification from "@/components/MemoryNotification";
 import FirstTimeMemoryNotice from "@/components/FirstTimeMemoryNotice";
 import WakeModeToggle from "@/components/WakeModeToggle";
 import SpeechConfirmBar from "@/components/SpeechConfirmBar";
-import { useCallback, useRef, useState, useEffect } from "react";
+import { useCallback, useRef, useState, useEffect, useSyncExternalStore } from "react";
 import { usePetState } from "@/hooks/usePetState";
 import { useMemory } from "@/hooks/useMemory";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
@@ -29,6 +29,34 @@ interface PendingSpeech {
   source: "click" | "inline" | "session";
 }
 
+const WAKE_MODE_STORAGE_KEY = "neon_paw_wake_mode";
+const WAKE_MODE_CHANGE_EVENT = "neon_paw_wake_mode_change";
+
+function getWakeModeSnapshot(): boolean {
+  if (typeof window === "undefined") return false;
+  return localStorage.getItem(WAKE_MODE_STORAGE_KEY) === "true";
+}
+
+function getWakeModeServerSnapshot(): boolean {
+  return false;
+}
+
+function subscribeWakeMode(onStoreChange: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener("storage", onStoreChange);
+  window.addEventListener(WAKE_MODE_CHANGE_EVENT, onStoreChange);
+  return () => {
+    window.removeEventListener("storage", onStoreChange);
+    window.removeEventListener(WAKE_MODE_CHANGE_EVENT, onStoreChange);
+  };
+}
+
+function persistWakeMode(enabled: boolean): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(WAKE_MODE_STORAGE_KEY, String(enabled));
+  window.dispatchEvent(new Event(WAKE_MODE_CHANGE_EVENT));
+}
+
 export default function Home() {
   const pet = usePetState();
   const memory = useMemory();
@@ -37,33 +65,28 @@ export default function Home() {
   const [isConnected, setIsConnected] = useState(true);
 
   // Wake mode state — persisted, default OFF
-  const [wakeWordEnabled, setWakeWordEnabled] = useState(false);
-  const [wakeWordReady, setWakeWordReady] = useState(false);
+  const wakeWordEnabled = useSyncExternalStore(
+    subscribeWakeMode,
+    getWakeModeSnapshot,
+    getWakeModeServerSnapshot,
+  );
   const [wakeStatus, setWakeStatus] = useState<string | null>(null);
   const [sessionActive, setSessionActive] = useState(false);
 
   // Phase 10D: pending speech confirmation
   const [pendingSpeech, setPendingSpeech] = useState<PendingSpeech | null>(null);
 
-  useEffect(() => {
-    const saved = localStorage.getItem("neon_paw_wake_mode");
-    if (saved === "true") setWakeWordEnabled(true);
-    setWakeWordReady(true);
-  }, []);
-
-  useEffect(() => {
-    if (wakeWordReady) {
-      localStorage.setItem("neon_paw_wake_mode", String(wakeWordEnabled));
-    }
-  }, [wakeWordEnabled, wakeWordReady]);
-
   // Refs for values needed inside async callbacks
   const petStateRef = useRef(pet.petState);
   const historyRef = useRef(pet.history);
   const memoriesRef = useRef(memory.memories);
-  petStateRef.current = pet.petState;
-  historyRef.current = pet.history;
-  memoriesRef.current = memory.memories;
+  const wakeWordControlsRef = useRef<ReturnType<typeof useWakeWord> | null>(null);
+
+  useEffect(() => {
+    petStateRef.current = pet.petState;
+    historyRef.current = pet.history;
+    memoriesRef.current = memory.memories;
+  }, [pet.petState, pet.history, memory.memories]);
 
   // Track last user message for duplicate detection
   const lastSentMessageRef = useRef<string | undefined>(undefined);
@@ -102,9 +125,7 @@ export default function Home() {
       tts.speak(response.reply, () => {
         pet.setIdle();
         // Resume wake listener after TTS finishes
-        if (wakeWordRef.current) {
-          wakeWordRef.current.resume();
-        }
+        wakeWordControlsRef.current?.resume();
         setWakeStatus(null);
       });
     }).catch(() => {
@@ -116,9 +137,7 @@ export default function Home() {
         timestamp: new Date().toISOString(),
       });
       // Resume wake listener on error too
-      if (wakeWordRef.current) {
-        wakeWordRef.current.resume();
-      }
+      wakeWordControlsRef.current?.resume();
       setWakeStatus(null);
     });
   }, [pet, tts, memory, stt]);
@@ -182,9 +201,7 @@ export default function Home() {
       const low = isLowConfidenceSpeech(text, null, lastSentMessageRef.current, lastSentTimeRef.current);
       if (low) {
         // Pause wake listener while showing confirmation
-        if (wakeWordRef.current) {
-          wakeWordRef.current.pause();
-        }
+        wakeWordControlsRef.current?.pause();
         handleLowConfidence(text, null, "session");
       } else {
         startVoiceInteraction(text);
@@ -200,12 +217,13 @@ export default function Home() {
       pet.setIdle();
       setTimeout(() => setWakeStatus(null), 3000);
     }, [pet]),
-    isSupported: stt.isSupported && wakeWordReady,
+    isSupported: stt.isSupported,
   });
 
   // Keep a ref to wakeWord for use in callbacks
-  const wakeWordRef = useRef(wakeWord);
-  wakeWordRef.current = wakeWord;
+  useEffect(() => {
+    wakeWordControlsRef.current = wakeWord;
+  }, [wakeWord]);
 
   // Pause wake listener when main STT starts (e.g. from click-to-talk)
   useEffect(() => {
@@ -223,9 +241,7 @@ export default function Home() {
     if (pendingSpeech) return; // Don't restart while pending confirmation
 
     // Pause wake listener during click-to-talk
-    if (wakeWordRef.current) {
-      wakeWordRef.current.pause();
-    }
+    wakeWordControlsRef.current?.pause();
     pet.setListening();
     stt.start(
       // onResult — high confidence, auto-send
@@ -240,7 +256,7 @@ export default function Home() {
         handleLowConfidence(text, confidence, "click");
       },
     );
-  }, [stt.isListening, stt.stop, stt.start, pet.setListening, startVoiceInteraction, handleLowConfidence, pendingSpeech, stt, pet]);
+  }, [stt, pet, startVoiceInteraction, handleLowConfidence, pendingSpeech]);
 
   // Confirm pending speech — send edited text
   const handleConfirmSpeech = useCallback((editedText: string) => {
@@ -257,8 +273,8 @@ export default function Home() {
     }
     setPendingSpeech(null);
     // Resume wake listener if it was active
-    if (wakeWordEnabled && wakeWordRef.current) {
-      wakeWordRef.current.resume();
+    if (wakeWordEnabled) {
+      wakeWordControlsRef.current?.resume();
     }
   }, [wakeWordEnabled]);
 
@@ -266,8 +282,8 @@ export default function Home() {
   const handleDismissSpeech = useCallback(() => {
     setPendingSpeech(null);
     // Resume wake listener
-    if (wakeWordEnabled && wakeWordRef.current) {
-      wakeWordRef.current.resume();
+    if (wakeWordEnabled) {
+      wakeWordControlsRef.current?.resume();
     }
     pet.setIdle();
   }, [wakeWordEnabled, pet]);
@@ -301,8 +317,8 @@ export default function Home() {
       headerAction={
         <WakeModeToggle
           enabled={wakeWordEnabled}
-          onToggle={() => setWakeWordEnabled((v) => !v)}
-          isSupported={stt.isSupported && wakeWordReady}
+          onToggle={() => persistWakeMode(!wakeWordEnabled)}
+          isSupported={stt.isSupported}
           error={wakeWord.error}
         />
       }
@@ -329,6 +345,7 @@ export default function Home() {
       )}
       {pendingSpeech ? (
         <SpeechConfirmBar
+          key={`${pendingSpeech.source}:${pendingSpeech.text}`}
           text={pendingSpeech.text}
           isLowConfidence={pendingSpeech.isLowConfidence}
           confidence={pendingSpeech.confidence}

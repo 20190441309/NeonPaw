@@ -50,8 +50,15 @@ export function useMemory() {
   const [firstTimeNotice, setFirstTimeNotice] = useState(false);
 
   useEffect(() => {
-    setMemories(loadMemories());
-    setHydrated(true);
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setMemories(loadMemories());
+      setHydrated(true);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {

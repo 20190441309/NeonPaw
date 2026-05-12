@@ -116,10 +116,17 @@ export function usePetState() {
 
   // Load from localStorage after hydration
   useEffect(() => {
-    const stored = loadState();
-    setPetState(stored.petState);
-    setHistory(stored.history);
-    setHydrated(true);
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      const stored = loadState();
+      setPetState(stored.petState);
+      setHistory(stored.history);
+      setHydrated(true);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const currentFrame = selectFrame(petState.mode, petState.emotion, lastAction);

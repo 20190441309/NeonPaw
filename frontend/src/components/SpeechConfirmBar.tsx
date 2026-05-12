@@ -22,11 +22,6 @@ export default function SpeechConfirmBar({
   const [editedText, setEditedText] = useState(text);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Update edited text when prop changes
-  useEffect(() => {
-    setEditedText(text);
-  }, [text]);
-
   // Auto-focus input on mount
   useEffect(() => {
     inputRef.current?.focus();
