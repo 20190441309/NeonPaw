@@ -12,6 +12,7 @@ import MemoryNotification from "@/components/MemoryNotification";
 import FirstTimeMemoryNotice from "@/components/FirstTimeMemoryNotice";
 import WakeModeToggle from "@/components/WakeModeToggle";
 import SpeechConfirmBar from "@/components/SpeechConfirmBar";
+import SpeechSignalPanel from "@/components/SpeechSignalPanel";
 import { useCallback, useRef, useState, useEffect, useSyncExternalStore } from "react";
 import { usePetState } from "@/hooks/usePetState";
 import { useMemory } from "@/hooks/useMemory";
@@ -292,6 +293,13 @@ export default function Home() {
 
   // Determine display status for the header
   const displayMode = wakeStatus || pet.petState.mode.toUpperCase();
+  const voiceSignalActive = stt.isListening || wakeWord.isActive || pendingSpeech != null;
+  const voiceSignalMode = pendingSpeech
+    ? "confirm"
+    : stt.isListening
+      ? "click"
+      : wakeWord.mode;
+  const voiceSignalConfidence = pendingSpeech?.confidence ?? stt.lastConfidence;
 
   const footerHint =
     pendingSpeech?.isLowConfidence ? "LOW CONFIDENCE // 可能没听清" :
@@ -325,6 +333,13 @@ export default function Home() {
       onClick={pet.wake}
     >
       <ASCIIPet frame={pet.currentFrame} />
+      <SpeechSignalPanel
+        isActive={voiceSignalActive}
+        mode={voiceSignalMode}
+        confidence={voiceSignalConfidence}
+        interimTranscript={pendingSpeech ? "" : stt.interimTranscript}
+        isLowConfidence={pendingSpeech?.isLowConfidence}
+      />
       <ChatTranscript messages={pet.history} />
       <PetStatusPanel state={pet.petState} />
       <AgentTracePanel trace={pet.trace} />
@@ -332,11 +347,6 @@ export default function Home() {
       <MemoryNotification content={memory.lastSaved} onDismiss={memory.clearLastSaved} />
       {memory.firstTimeNotice && (
         <FirstTimeMemoryNotice onDismiss={memory.clearFirstTimeNotice} />
-      )}
-      {stt.interimTranscript && !pendingSpeech && (
-        <div className="text-xs mt-2 opacity-50 text-center glow-subtle">
-          {stt.interimTranscript}...
-        </div>
       )}
       {stt.error && (
         <div className="text-[10px] mt-2 text-red-400/70 text-center">
