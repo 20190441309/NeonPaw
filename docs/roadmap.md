@@ -156,7 +156,7 @@ NEON PAW can handle small useful tasks without becoming a generic chatbot, and A
 
 These tasks turn the project from a local web demo into something easier to use regularly.
 
-- [ ] Add PWA support.
+- [x] Add PWA support.
   Include manifest, icons, mobile polish, and an installable shell.
 - [ ] Build an Electron desktop version.
   NEON PAW should be able to behave like a small desktop companion.
