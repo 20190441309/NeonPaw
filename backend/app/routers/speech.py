@@ -29,6 +29,7 @@ router = APIRouter(prefix="/api/speech", tags=["speech"])
 class ServiceStatus(BaseModel):
     available: bool
     engine: str
+    model: str = ""
     error: str | None = None
 
 
@@ -39,7 +40,9 @@ class SpeechStatusResponse(BaseModel):
 
 class STTResponse(BaseModel):
     text: str
-    success: bool
+    confidence: float = 0.95
+    engine: str = "funasr"
+    success: bool = True
     error: str | None = None
 
 
@@ -65,11 +68,13 @@ async def speech_status():
         stt=ServiceStatus(
             available=stt_status["available"],
             engine=stt_status["engine"],
+            model=stt_status.get("model", ""),
             error=stt_status.get("error"),
         ),
         tts=ServiceStatus(
             available=tts_status["available"],
             engine=tts_status["engine"],
+            model=tts_status.get("model", ""),
             error=tts_status.get("error"),
         ),
     )
@@ -115,6 +120,8 @@ async def speech_to_text(file: UploadFile = File(...)):
 
     return STTResponse(
         text=result["text"],
+        confidence=result.get("confidence", 0.95),
+        engine=status.get("engine", "funasr"),
         success=True,
         error=None,
     )
