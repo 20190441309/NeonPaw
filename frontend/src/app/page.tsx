@@ -13,12 +13,15 @@ import FirstTimeMemoryNotice from "@/components/FirstTimeMemoryNotice";
 import WakeModeToggle from "@/components/WakeModeToggle";
 import SpeechConfirmBar from "@/components/SpeechConfirmBar";
 import SpeechSignalPanel from "@/components/SpeechSignalPanel";
+import { LanguageSelector } from "@/components/LanguageSelector";
 import { useCallback, useRef, useState, useEffect, useSyncExternalStore } from "react";
 import { usePetState } from "@/hooks/usePetState";
 import { useMemory } from "@/hooks/useMemory";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
+import { useSpeechLanguage } from "@/hooks/useSpeechLanguage";
 import { useWakeWord, type WakeResult } from "@/hooks/useWakeWord";
+import { useHealthCheck } from "@/hooks/useHealthCheck";
 import { callChatApi } from "@/lib/api";
 import { isLowConfidenceSpeech, normalizeSpeechText } from "@/lib/speechUtils";
 
@@ -61,8 +64,10 @@ function persistWakeMode(enabled: boolean): void {
 export default function Home() {
   const pet = usePetState();
   const memory = useMemory();
-  const stt = useSpeechRecognition();
-  const tts = useSpeechSynthesis();
+  const speechLanguage = useSpeechLanguage();
+  const stt = useSpeechRecognition(speechLanguage.languageCode);
+  const tts = useSpeechSynthesis(speechLanguage.languageCode);
+  const healthCheck = useHealthCheck();
   const [isConnected, setIsConnected] = useState(true);
 
   // Wake mode state — persisted, default OFF
@@ -88,6 +93,13 @@ export default function Home() {
     historyRef.current = pet.history;
     memoriesRef.current = memory.memories;
   }, [pet.petState, pet.history, memory.memories]);
+
+  // Register PWA service worker
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+  }, []);
 
   // Track last user message for duplicate detection
   const lastSentMessageRef = useRef<string | undefined>(undefined);
@@ -219,6 +231,7 @@ export default function Home() {
       setTimeout(() => setWakeStatus(null), 3000);
     }, [pet]),
     isSupported: stt.isSupported,
+    language: speechLanguage.languageCode,
   });
 
   // Keep a ref to wakeWord for use in callbacks
@@ -320,15 +333,22 @@ export default function Home() {
   return (
     <TerminalShell
       statusLabel={displayMode}
-      statusHint={<StatusHint trace={pet.trace} isConnected={isConnected} memoryCount={memory.memories.length} />}
+      statusHint={<StatusHint trace={pet.trace} isConnected={isConnected} memoryCount={memory.memories.length} health={healthCheck.health} />}
       footerHint={footerHint}
       headerAction={
-        <WakeModeToggle
-          enabled={wakeWordEnabled}
-          onToggle={() => persistWakeMode(!wakeWordEnabled)}
-          isSupported={stt.isSupported}
-          error={wakeWord.error}
-        />
+        <div className="flex items-center gap-2">
+          <LanguageSelector
+            currentLanguage={speechLanguage.languageCode}
+            onLanguageChange={speechLanguage.setLanguage}
+            compact
+          />
+          <WakeModeToggle
+            enabled={wakeWordEnabled}
+            onToggle={() => persistWakeMode(!wakeWordEnabled)}
+            isSupported={stt.isSupported}
+            error={wakeWord.error}
+          />
+        </div>
       }
       onClick={pet.wake}
     >

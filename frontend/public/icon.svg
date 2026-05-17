@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="64" fill="#0a0a0a"/>
+  <rect x="32" y="32" width="448" height="448" rx="32" fill="none" stroke="#00ff9f" stroke-width="4" opacity="0.3"/>
+  <!-- Cat ears -->
+  <polygon points="140,140 170,60 200,140" fill="none" stroke="#00ff9f" stroke-width="6" stroke-linejoin="round"/>
+  <polygon points="312,140 342,60 372,140" fill="none" stroke="#00ff9f" stroke-width="6" stroke-linejoin="round"/>
+  <!-- Head outline -->
+  <ellipse cx="256" cy="260" rx="120" ry="100" fill="none" stroke="#00ff9f" stroke-width="6"/>
+  <!-- Eyes -->
+  <circle cx="210" cy="240" r="16" fill="#00ff9f"/>
+  <circle cx="302" cy="240" r="16" fill="#00ff9f"/>
+  <circle cx="216" cy="234" r="6" fill="#0a0a0a"/>
+  <circle cx="308" cy="234" r="6" fill="#0a0a0a"/>
+  <!-- Nose -->
+  <polygon points="256,270 248,282 264,282" fill="#00ff9f"/>
+  <!-- Mouth -->
+  <path d="M230,290 Q256,310 282,290" fill="none" stroke="#00ff9f" stroke-width="4" stroke-linecap="round"/>
+  <!-- Whiskers -->
+  <line x1="120" y1="250" x2="190" y2="260" stroke="#00ff9f" stroke-width="3" opacity="0.6"/>
+  <line x1="120" y1="275" x2="190" y2="275" stroke="#00ff9f" stroke-width="3" opacity="0.6"/>
+  <line x1="322" y1="260" x2="392" y2="250" stroke="#00ff9f" stroke-width="3" opacity="0.6"/>
+  <line x1="322" y1="275" x2="392" y2="275" stroke="#00ff9f" stroke-width="3" opacity="0.6"/>
+  <!-- Terminal text -->
+  <text x="256" y="400" text-anchor="middle" font-family="monospace" font-size="36" font-weight="bold" fill="#00ff9f" opacity="0.8">NEON PAW</text>
+  <text x="256" y="440" text-anchor="middle" font-family="monospace" font-size="18" fill="#00ff9f" opacity="0.4">TERMINAL PET</text>
+</svg>
