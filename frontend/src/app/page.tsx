@@ -15,6 +15,7 @@ import SpeechConfirmBar from "@/components/SpeechConfirmBar";
 import SpeechSignalPanel from "@/components/SpeechSignalPanel";
 import SettingsButton from "@/components/SettingsButton";
 import SettingsPanel from "@/components/SettingsPanel";
+import InstallBanner from "@/components/InstallBanner";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { useCallback, useRef, useState, useEffect, useSyncExternalStore } from "react";
 import { usePetState } from "@/hooks/usePetState";
@@ -430,6 +431,7 @@ export default function Home() {
         onUpdate={updateSettings}
         onClose={() => setSettingsOpen(false)}
       />
+      <InstallBanner />
     </TerminalShell>
   );
 }
