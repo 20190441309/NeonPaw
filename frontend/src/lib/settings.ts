@@ -12,7 +12,7 @@ export interface LLMProviderPreset {
 
 export const LLM_PROVIDER_PRESETS: LLMProviderPreset[] = [
   { name: "deepseek", label: "DeepSeek", defaultModel: "deepseek-chat" },
-  { name: "gemini", label: "Google Gemini", defaultModel: "gem-2.0-flash" },
+  { name: "gemini", label: "Google Gemini", defaultModel: "gemini-2.0-flash" },
   { name: "kimi", label: "Moonshot Kimi", defaultModel: "moonshot-v1-8k" },
   { name: "glm", label: "Zhipu GLM", defaultModel: "glm-4-flash" },
   { name: "qwen", label: "Alibaba Qwen", defaultModel: "qwen-turbo" },
