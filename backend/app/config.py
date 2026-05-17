@@ -19,5 +19,6 @@ STT_DEVICE = os.getenv("STT_DEVICE", "cuda")
 TTS_ENABLED = os.getenv("TTS_ENABLED", "true").lower() == "true"
 TTS_MODEL = os.getenv("TTS_MODEL", "CosyVoice-300M")
 TTS_DEFAULT_VOICE = os.getenv("TTS_DEFAULT_VOICE", "default")
+TTS_DEVICE = os.getenv("TTS_DEVICE", "cuda")
 
 SPEECH_FALLBACK_TO_BROWSER = os.getenv("SPEECH_FALLBACK_TO_BROWSER", "true").lower() == "true"
