@@ -1,5 +1,6 @@
 """FunASR STT service wrapper with GPU support."""
 
+import asyncio
 import logging
 from typing import Any, Dict, Optional
 
@@ -50,16 +51,16 @@ class STTService:
                 config.STT_MODEL,
                 config.STT_VAD_MODEL,
                 config.STT_PUNC_MODEL,
-                config.DEVICE,
+                config.STT_DEVICE,
             )
             self._model = AutoModel(
                 model=config.STT_MODEL,
                 vad_model=config.STT_VAD_MODEL,
                 punc_model=config.STT_PUNC_MODEL,
-                device=config.DEVICE,
+                device=config.STT_DEVICE,
             )
             self._loaded = True
-            logger.info("FunASR model loaded successfully on %s.", config.DEVICE)
+            logger.info("FunASR model loaded successfully on %s.", config.STT_DEVICE)
         except Exception as exc:
             self._load_error = str(exc)
             self._loaded = True
@@ -78,20 +79,18 @@ class STTService:
             "available": available,
             "engine": "funasr",
             "model": config.STT_MODEL,
-            "device": config.DEVICE,
+            "device": config.STT_DEVICE,
             "error": self._load_error,
         }
 
     async def transcribe(
         self,
         audio_data: bytes,
-        format: str = "wav",
     ) -> Dict[str, Any]:
         """Transcribe audio data to text.
 
         Args:
-            audio_data: Raw audio bytes.
-            format: Audio format (e.g. "wav", "mp3", "pcm").
+            audio_data: Raw audio bytes (WAV format expected by FunASR).
 
         Returns:
             Dict with keys: success, text, error.
@@ -106,7 +105,9 @@ class STTService:
             }
 
         try:
-            result = self._model.generate(input=audio_data)
+            result = await asyncio.to_thread(
+                self._model.generate, input=audio_data
+            )
             text = ""
             if result and len(result) > 0:
                 text = result[0].get("text", "")
