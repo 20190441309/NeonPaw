@@ -1,4 +1,4 @@
-"""Tests for RootBrain orchestration, fallback behavior, and response contract."""
+"""Tests for RootBrain CoT orchestration, glitch behavior, and response contract."""
 
 from __future__ import annotations
 
@@ -6,10 +6,17 @@ import os
 import pytest
 
 from app.schemas import PetState, ChatResponse, StateDelta, Memory, TraceEntry
-from app.agents.root_brain import generate_response, fallback_response
+from app.agents.root_brain import (
+    generate_response,
+    glitch_response,
+    _extract_reasoning_steps,
+    _extract_json,
+    _validate_and_build_response,
+    _clamp_delta,
+)
 
 
-# ── Fixtures ──────────────────────────────────────────────
+# -- Fixtures ----------------------------------------------------------------
 
 @pytest.fixture
 def pet_state() -> PetState:
@@ -17,17 +24,17 @@ def pet_state() -> PetState:
 
 
 @pytest.fixture(autouse=True)
-def _force_mock_mode(monkeypatch):
-    """Ensure LLM_API_KEY is empty so all tests use the mock pipeline."""
+def _force_no_api_key(monkeypatch):
+    """Ensure LLM_API_KEY is empty so tests hit the glitch path (no mock)."""
     monkeypatch.setenv("LLM_API_KEY", "")
 
 
-# ── Fallback Response ─────────────────────────────────────
+# -- Glitch Response ---------------------------------------------------------
 
-class TestFallbackResponse:
+class TestGlitchResponse:
 
-    def test_fallback_has_all_fields(self):
-        resp = fallback_response()
+    def test_glitch_has_all_fields(self):
+        resp = glitch_response("test error")
         assert isinstance(resp, ChatResponse)
         assert resp.reply
         assert resp.emotion == "glitch"
@@ -38,12 +45,16 @@ class TestFallbackResponse:
         assert isinstance(resp.trace, list)
         assert len(resp.trace) > 0
 
-    def test_fallback_trace_module(self):
-        resp = fallback_response()
-        assert resp.trace[0].module == "fallback"
+    def test_glitch_trace_module(self):
+        resp = glitch_response("test error")
+        assert resp.trace[0].module == "root_agent"
+
+    def test_glitch_default_message(self):
+        resp = glitch_response()
+        assert "Unknown error" in resp.trace[0].message
 
 
-# ── Response Contract Validation ──────────────────────────
+# -- Response Contract Validation --------------------------------------------
 
 def _assert_valid_response(resp: ChatResponse):
     """Validate that a ChatResponse matches the expected contract."""
@@ -62,132 +73,176 @@ def _assert_valid_response(resp: ChatResponse):
         assert isinstance(entry.message, str)
 
 
-# ── Mock Pipeline Orchestration ───────────────────────────
+# -- No API Key Returns Glitch -----------------------------------------------
 
-class TestMockOrchestration:
+class TestNoApiKey:
 
     @pytest.mark.asyncio
-    async def test_greeting_response(self, pet_state: PetState):
+    async def test_no_key_returns_glitch(self, pet_state: PetState):
         resp = await generate_response("你好", pet_state, [], None)
         _assert_valid_response(resp)
-        assert resp.action == "wake"
-        assert resp.emotion == "happy"
+        assert resp.emotion == "glitch"
+        assert resp.action == "glitch"
+        assert "LLM_API_KEY" in resp.trace[0].message
 
-    @pytest.mark.asyncio
-    async def test_sad_response(self, pet_state: PetState):
-        resp = await generate_response("我今天好累", pet_state, [], None)
+
+# -- Clamp Delta -------------------------------------------------------------
+
+class TestClampDelta:
+
+    def test_positive_clamped_to_5(self):
+        assert _clamp_delta(10) == 5
+        assert _clamp_delta(100) == 5
+
+    def test_negative_clamped_to_neg5(self):
+        assert _clamp_delta(-10) == -5
+        assert _clamp_delta(-100) == -5
+
+    def test_within_range_unchanged(self):
+        assert _clamp_delta(0) == 0
+        assert _clamp_delta(3) == 3
+        assert _clamp_delta(-3) == -3
+        assert _clamp_delta(5) == 5
+        assert _clamp_delta(-5) == -5
+
+
+# -- CoT Reasoning Extraction ------------------------------------------------
+
+class TestExtractReasoningSteps:
+
+    def test_extracts_intent(self):
+        content = "[INTENT: greeting] 用户在打招呼\n[EMOTION: happy, 强度3] 用户心情不错"
+        trace = _extract_reasoning_steps(content)
+        modules = [t.module for t in trace]
+        assert "intent" in modules
+        assert "emotion" in modules
+
+    def test_extracts_all_steps(self):
+        content = (
+            "[INTENT: greeting] 打招呼\n"
+            "[EMOTION: happy, 强度3] 开心\n"
+            "[ACTION: wake] 唤醒\n"
+            "[STATE: energy=-1, mood=5, affinity=3, hunger=0, stability=0] 状态\n"
+            "[REPLY: 你好呀~] 回复\n"
+            "[MEMORY: no] 不保存"
+        )
+        trace = _extract_reasoning_steps(content)
+        modules = [t.module for t in trace]
+        assert "intent" in modules
+        assert "emotion" in modules
+        assert "action" in modules
+        assert "state_delta" in modules
+        assert "persona" in modules
+        assert "memory" in modules
+
+    def test_no_steps_returns_minimal_trace(self):
+        content = '{"reply": "hi", "emotion": "happy", "action": "speak"}'
+        trace = _extract_reasoning_steps(content)
+        assert len(trace) == 1
+        assert trace[0].module == "root_agent"
+
+
+# -- JSON Extraction ---------------------------------------------------------
+
+class TestExtractJson:
+
+    def test_extracts_simple_json(self):
+        content = '{"reply": "hi", "emotion": "happy", "action": "speak"}'
+        data = _extract_json(content)
+        assert data is not None
+        assert data["reply"] == "hi"
+
+    def test_extracts_json_after_reasoning(self):
+        content = (
+            "[INTENT: greeting] 打招呼\n"
+            "[EMOTION: happy, 强度3] 开心\n"
+            '\n{"reply": "你好~", "emotion": "happy", "action": "wake", '
+            '"voice_style": "soft_robotic", '
+            '"state_delta": {"energy": -1, "mood": 5, "affinity": 3, "hunger": 0, "stability": 0}, '
+            '"memory": {"should_save": false, "content": ""}}'
+        )
+        data = _extract_json(content)
+        assert data is not None
+        assert data["reply"] == "你好~"
+        assert data["action"] == "wake"
+
+    def test_returns_none_for_no_json(self):
+        data = _extract_json("this is not json at all")
+        assert data is None
+
+
+# -- Validate and Build Response ---------------------------------------------
+
+class TestValidateAndBuildResponse:
+
+    def test_valid_data_builds_response(self):
+        data = {
+            "reply": "hello",
+            "emotion": "happy",
+            "action": "speak",
+            "voice_style": "soft_robotic",
+            "state_delta": {"energy": -1, "mood": 2, "affinity": 1, "hunger": 0, "stability": 0},
+            "memory": {"should_save": False, "content": ""},
+        }
+        trace = [TraceEntry(module="test", message="test")]
+        resp = _validate_and_build_response(data, trace)
         _assert_valid_response(resp)
-        assert resp.action == "comfort"
-        assert resp.emotion == "comforting"
+        assert resp.reply == "hello"
 
-    @pytest.mark.asyncio
-    async def test_question_response(self, pet_state: PetState):
-        resp = await generate_response("你在干什么？", pet_state, [], None)
-        _assert_valid_response(resp)
-        assert resp.action == "think"
-        assert resp.emotion == "curious"
+    def test_invalid_action_becomes_glitch(self):
+        data = {
+            "reply": "hi",
+            "emotion": "happy",
+            "action": "dance",
+            "voice_style": "soft_robotic",
+            "state_delta": {},
+            "memory": {},
+        }
+        trace = []
+        resp = _validate_and_build_response(data, trace)
+        assert resp.action == "glitch"
 
-    @pytest.mark.asyncio
-    async def test_default_response(self, pet_state: PetState):
-        resp = await generate_response("随便聊聊", pet_state, [], None)
-        _assert_valid_response(resp)
-        assert resp.action == "speak"
-        assert resp.emotion == "neutral"
-
-
-# ── Agent Trace ───────────────────────────────────────────
-
-class TestAgentTrace:
-
-    @pytest.mark.asyncio
-    async def test_trace_has_five_modules(self, pet_state: PetState):
-        resp = await generate_response("你好", pet_state, [], None)
-        modules = [t.module for t in resp.trace]
-        assert modules == ["intent_agent", "emotion_agent", "action_agent", "memory_agent", "root_agent"]
-
-    @pytest.mark.asyncio
-    async def test_trace_indicates_mock_pipeline(self, pet_state: PetState):
-        resp = await generate_response("你好", pet_state, [], None)
-        assert resp.trace[-1].message == "response assembled via mock pipeline"
-
-    @pytest.mark.asyncio
-    async def test_trace_greeting_intent(self, pet_state: PetState):
-        resp = await generate_response("你好", pet_state, [], None)
-        assert "greeting" in resp.trace[0].message
-
-    @pytest.mark.asyncio
-    async def test_trace_sad_intent(self, pet_state: PetState):
-        resp = await generate_response("好累", pet_state, [], None)
-        assert "sadness" in resp.trace[0].message or "sad" in resp.trace[0].message.lower()
+    def test_invalid_emotion_becomes_glitch(self):
+        data = {
+            "reply": "hi",
+            "emotion": "excited",
+            "action": "speak",
+            "voice_style": "soft_robotic",
+            "state_delta": {},
+            "memory": {},
+        }
+        trace = []
+        resp = _validate_and_build_response(data, trace)
+        assert resp.emotion == "glitch"
 
 
-# ── Memory Integration ────────────────────────────────────
+# -- LLM Integration (optional) ---------------------------------------------
 
-class TestMemoryIntegration:
-
-    @pytest.mark.asyncio
-    async def test_name_saved_as_memory(self, pet_state: PetState):
-        resp = await generate_response("我叫小野", pet_state, [], None)
-        assert resp.memory.should_save is True
-        assert "小野" in resp.memory.content
-
-    @pytest.mark.asyncio
-    async def test_temporary_emotion_not_saved(self, pet_state: PetState):
-        resp = await generate_response("我今天好累", pet_state, [], None)
-        assert resp.memory.should_save is False
-
-    @pytest.mark.asyncio
-    async def test_greeting_not_saved(self, pet_state: PetState):
-        resp = await generate_response("你好", pet_state, [], None)
-        assert resp.memory.should_save is False
-
-
-# ── State Delta Integration ───────────────────────────────
-
-class TestStateDeltaIntegration:
-
-    @pytest.mark.asyncio
-    async def test_greeting_state_delta(self, pet_state: PetState):
-        resp = await generate_response("你好", pet_state, [], None)
-        # wake action: energy -1, mood 5, affinity 3
-        assert resp.state_delta.energy == -1
-        assert resp.state_delta.mood == 5
-        assert resp.state_delta.affinity == 3
-
-    @pytest.mark.asyncio
-    async def test_comfort_state_delta(self, pet_state: PetState):
-        resp = await generate_response("好累", pet_state, [], None)
-        # comfort action: energy -2, mood 5, affinity 3
-        assert resp.state_delta.energy == -2
-        assert resp.state_delta.mood == 5
-
-
-# ── DeepSeek Integration (optional) ──────────────────────
-
-class TestDeepSeekIntegration:
+class TestLLMIntegration:
     """These tests only run when LLM_API_KEY is set in the environment."""
 
     @pytest.fixture(autouse=True)
     def _require_api_key(self, monkeypatch):
         api_key = os.getenv("LLM_API_KEY", "")
         if not api_key:
-            pytest.skip("LLM_API_KEY not set — skipping DeepSeek integration tests")
-        # Remove the mock-mode override so real LLM path is used
+            pytest.skip("LLM_API_KEY not set -- skipping LLM integration tests")
+        # Remove the no-key override so real LLM path is used
         monkeypatch.delenv("LLM_API_KEY", raising=False)
         monkeypatch.setenv("LLM_API_KEY", api_key)
 
     @pytest.mark.asyncio
-    async def test_deepseek_returns_valid_contract(self, pet_state: PetState):
+    async def test_llm_returns_valid_contract(self, pet_state: PetState):
         resp = await generate_response("你好", pet_state, [], None)
         _assert_valid_response(resp)
 
     @pytest.mark.asyncio
-    async def test_deepseek_trace_shows_llm(self, pet_state: PetState):
-        resp = await generate_response("你好", pet_state, [], None)
-        assert resp.trace[-1].message == "response assembled via LLM"
-
-    @pytest.mark.asyncio
-    async def test_deepseek_response_not_empty(self, pet_state: PetState):
+    async def test_llm_response_not_empty(self, pet_state: PetState):
         resp = await generate_response("你好", pet_state, [], None)
         assert len(resp.reply) > 0
         assert resp.reply != "..."
+
+    @pytest.mark.asyncio
+    async def test_llm_trace_has_reasoning(self, pet_state: PetState):
+        resp = await generate_response("你好", pet_state, [], None)
+        assert len(resp.trace) > 0
+        assert all(isinstance(e, TraceEntry) for e in resp.trace)

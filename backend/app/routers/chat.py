@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 from app.schemas import ChatRequest, ChatResponse
-from app.agents.root_brain import generate_response, fallback_response
+from app.agents.root_brain import generate_response, glitch_response
 
 router = APIRouter()
 
@@ -16,4 +16,4 @@ async def chat(request: ChatRequest):
         )
         return response
     except Exception:
-        return fallback_response()
+        return glitch_response("Unhandled exception in chat endpoint")

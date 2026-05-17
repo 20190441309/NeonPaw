@@ -1,12 +1,9 @@
-"""Root Brain — self-developed multi-agent orchestrator.
+"""Root Brain — CoT-powered multi-agent orchestrator.
 
-Orchestrates seven agent modules (intent, emotion, action, state_delta,
-memory_decision, persona, root_brain) to produce a ChatResponse.
-Does not use Google ADK runtime; uses custom Python orchestration.
+Uses a single LLM call with chain-of-thought prompting to produce
+intelligent per-agent decisions. Each reasoning step becomes a trace entry.
 
-Two execution paths:
-  - Mock path (no LLM_API_KEY): runs all modules with rule-based logic.
-  - LLM path (with LLM_API_KEY): calls DeepSeek, validates JSON, infers trace.
+No mock fallback — LLM failure returns a glitch response.
 """
 
 from __future__ import annotations
@@ -26,12 +23,6 @@ from app.schemas import (
     StateDelta,
     TraceEntry,
 )
-from app.agents.intent import detect_intent
-from app.agents.emotion import detect_emotion
-from app.agents.action import select_action
-from app.agents.state_delta import compute_state_delta
-from app.agents.memory_decision import decide_memory
-from app.agents.persona import generate_reply
 from app.services.prompts import SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
@@ -40,40 +31,108 @@ VALID_ACTIONS = {"wake", "sleep", "listen", "think", "speak", "happy", "comfort"
 VALID_EMOTIONS = {"neutral", "happy", "sad", "sleepy", "curious", "comforting", "glitch"}
 
 
-def _clamp(value: int, lo: int = -10, hi: int = 10) -> int:
-    return max(lo, min(hi, value))
+def _clamp_delta(value: int) -> int:
+    """Clamp a state delta value to -5..+5 range."""
+    return max(-5, min(5, value))
 
 
-def fallback_response() -> ChatResponse:
+def _clamp_state(value: int) -> int:
+    """Clamp a pet state value to 0..100 range."""
+    return max(0, min(100, value))
+
+
+def glitch_response(error_message: str = "Unknown error") -> ChatResponse:
+    """Return a glitch response when LLM fails."""
     return ChatResponse(
         reply="核心信号有点不稳定……但我还在这里。",
         emotion="glitch",
         action="glitch",
         voice_style="soft_robotic",
-        state_delta=StateDelta(energy=-1, mood=-1, stability=-3),
+        state_delta=StateDelta(energy=-1, mood=-1, affinity=0, hunger=0, stability=-3),
         memory=Memory(),
-        trace=[TraceEntry(module="fallback", message="LLM failed or returned invalid JSON.")],
+        trace=[TraceEntry(module="root_agent", message=error_message)],
     )
 
 
-def _validate_llm_response(data: dict, trace: list[TraceEntry]) -> ChatResponse:
-    """Parse and validate raw LLM JSON into a ChatResponse."""
+def _extract_reasoning_steps(content: str) -> list[TraceEntry]:
+    """Extract CoT reasoning steps as trace entries from LLM response."""
+    patterns = {
+        "intent": r"\[INTENT:\s*\w+\]\s*(.+?)(?=\[|$)",
+        "emotion": r"\[EMOTION:\s*\w+(?:,\s*强度\d+)?\]\s*(.+?)(?=\[|$)",
+        "action": r"\[ACTION:\s*\w+\]\s*(.+?)(?=\[|$)",
+        "state_delta": r"\[STATE:\s*[^\]]+\]\s*(.+?)(?=\[|$)",
+        "persona": r"\[REPLY:\s*.+?\]\s*(.+?)(?=\[|$)",
+        "memory": r"\[MEMORY:\s*\w+\]\s*(.+?)(?=\[|$)",
+    }
+
+    trace = []
+    for module, pattern in patterns.items():
+        match = re.search(pattern, content, re.DOTALL)
+        if match:
+            reason = match.group(1).strip()
+            # Take first line only for trace conciseness
+            first_line = reason.split("\n")[0].strip()
+            if first_line:
+                trace.append(TraceEntry(module=module, message=first_line))
+
+    # If no reasoning steps found, return a minimal trace
+    if not trace:
+        trace.append(TraceEntry(module="root_agent", message="LLM response parsed (no reasoning steps extracted)"))
+
+    return trace
+
+
+def _extract_json(content: str) -> dict | None:
+    """Extract JSON from LLM response content."""
+    # Try to find JSON after all reasoning steps
+    # Look for the last JSON object in the content
+    json_pattern = r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
+    matches = re.findall(json_pattern, content, re.DOTALL)
+
+    for match in reversed(matches):
+        try:
+            data = json.loads(match)
+            # Verify it has the required fields
+            if "reply" in data and "emotion" in data and "action" in data:
+                return data
+        except json.JSONDecodeError:
+            continue
+
+    # If no nested JSON found, try the entire content as JSON
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        return None
+
+
+def _validate_and_build_response(data: dict, trace: list[TraceEntry]) -> ChatResponse:
+    """Validate LLM JSON output and build ChatResponse."""
     action = data.get("action", "speak")
     emotion = data.get("emotion", "neutral")
+
+    # Validate action and emotion against whitelists
     if action not in VALID_ACTIONS:
-        action = "speak"
+        trace.append(TraceEntry(module="validation", message=f"action '{action}' not in whitelist, using 'glitch'"))
+        action = "glitch"
     if emotion not in VALID_EMOTIONS:
-        emotion = "neutral"
+        trace.append(TraceEntry(module="validation", message=f"emotion '{emotion}' not in whitelist, using 'glitch'"))
+        emotion = "glitch"
 
+    # Parse and clamp state delta
     raw_delta = data.get("state_delta", {})
-    state_delta = StateDelta(
-        energy=_clamp(int(raw_delta.get("energy", 0))),
-        mood=_clamp(int(raw_delta.get("mood", 0))),
-        affinity=_clamp(int(raw_delta.get("affinity", 0))),
-        hunger=_clamp(int(raw_delta.get("hunger", 0))),
-        stability=_clamp(int(raw_delta.get("stability", 0))),
-    )
+    try:
+        state_delta = StateDelta(
+            energy=_clamp_delta(int(raw_delta.get("energy", 0))),
+            mood=_clamp_delta(int(raw_delta.get("mood", 0))),
+            affinity=_clamp_delta(int(raw_delta.get("affinity", 0))),
+            hunger=_clamp_delta(int(raw_delta.get("hunger", 0))),
+            stability=_clamp_delta(int(raw_delta.get("stability", 0))),
+        )
+    except (ValueError, TypeError):
+        trace.append(TraceEntry(module="validation", message="state_delta parse error, using zeros"))
+        state_delta = StateDelta()
 
+    # Parse memory
     raw_memory = data.get("memory", {})
     memory = Memory(
         should_save=bool(raw_memory.get("should_save", False)),
@@ -114,56 +173,28 @@ def _build_messages(
         mem_lines = "\n".join(f"- {m.content}" for m in memories)
         messages.append({
             "role": "system",
-            "content": f"[User Memories]\n你记得关于用户的以下信息，在回复中自然地引用：\n{mem_lines}",
+            "content": f"[User Memories]\n{mem_lines}",
         })
 
-    for msg in history[-10:]:
+    for msg in history[-5:]:
         messages.append({"role": msg.role, "content": msg.content})
 
     messages.append({"role": "user", "content": message})
     return messages
 
 
-def _infer_llm_trace(data: dict, message: str) -> list[TraceEntry]:
-    """Generate module-style trace entries from an LLM response."""
-    intent = detect_intent(message)
-    emotion = data.get("emotion", "neutral")
-    action = data.get("action", "speak")
-    memory = data.get("memory", {})
-
-    intent_labels = {
-        "greeting": "detected greeting",
-        "sad": "detected sadness/distress",
-        "question": "detected question",
-        "default": "general conversation",
-    }
-    emotion_labels = {
-        "happy": "user mood positive",
-        "sad": "user mood low",
-        "comforting": "user needs comfort",
-        "curious": "user is curious",
-        "neutral": "user mood neutral",
-        "sleepy": "pet sleepy",
-        "glitch": "instability detected",
-    }
-
-    return [
-        TraceEntry(module="intent_agent", message=f"{intent_labels.get(intent, intent)}"),
-        TraceEntry(module="emotion_agent", message=f"{emotion_labels.get(emotion, emotion)}"),
-        TraceEntry(module="action_agent", message=f"selected {action}"),
-        TraceEntry(module="memory_agent", message="memory saved" if memory.get("should_save") else "no stable memory"),
-        TraceEntry(module="root_agent", message="response assembled via LLM"),
-    ]
-
-
-async def _call_llm(
+async def generate_response(
     message: str,
     pet_state: PetState,
     history: list[ConversationMessage],
     memories: list[MemoryEntry] | None = None,
 ) -> ChatResponse:
-    """Call DeepSeek-compatible API and return validated ChatResponse."""
+    """Main entry point — single LLM call with CoT reasoning."""
     from app import config
+
+    if not config.LLM_API_KEY:
+        logger.warning("No LLM_API_KEY set, returning glitch response")
+        return glitch_response("LLM_API_KEY not configured")
 
     client = AsyncOpenAI(
         api_key=config.LLM_API_KEY,
@@ -173,119 +204,32 @@ async def _call_llm(
 
     messages = _build_messages(message, pet_state, history, memories)
 
-    completion = await client.chat.completions.create(
-        model=config.LLM_MODEL,
-        messages=messages,
-        temperature=0.7,
-        max_tokens=512,
-        response_format={"type": "json_object"},
-    )
+    try:
+        completion = await client.chat.completions.create(
+            model=config.LLM_MODEL,
+            messages=messages,
+            temperature=0.7,
+            max_tokens=1024,
+        )
+    except Exception as e:
+        logger.exception("LLM call failed")
+        return glitch_response(f"LLM 调用失败: {type(e).__name__}")
 
     content = completion.choices[0].message.content
     if not content or not content.strip():
-        logger.warning("LLM returned empty content, using fallback response")
-        return ChatResponse(
-            reply="核心信号有点不稳定……但我还在这里。",
-            emotion="glitch",
-            action="glitch",
-            voice_style="soft_robotic",
-            state_delta=StateDelta(energy=-1, mood=-1, stability=-3),
-            memory=Memory(),
-            trace=[
-                TraceEntry(module="root_agent", message="LLM returned empty content; fallback response used."),
-            ],
-        )
+        logger.warning("LLM returned empty content")
+        return glitch_response("LLM 返回空内容")
 
     content = content.strip()
-    if content.startswith("```"):
-        content = re.sub(r"^```(?:json)?\s*", "", content)
-        content = re.sub(r"\s*```$", "", content)
+    logger.debug("LLM raw output:\n%s", content)
 
-    try:
-        data = json.loads(content)
-    except json.JSONDecodeError:
-        logger.warning("LLM returned non-JSON content: %s", content[:100])
-        return ChatResponse(
-            reply="核心信号有点不稳定……但我还在这里。",
-            emotion="glitch",
-            action="glitch",
-            voice_style="soft_robotic",
-            state_delta=StateDelta(energy=-1, mood=-1, stability=-3),
-            memory=Memory(),
-            trace=[
-                TraceEntry(module="root_agent", message="LLM returned invalid JSON; fallback response used."),
-            ],
-        )
+    # Extract reasoning steps as trace
+    trace = _extract_reasoning_steps(content)
 
-    trace = _infer_llm_trace(data, message)
-    return _validate_llm_response(data, trace)
+    # Extract JSON from response
+    data = _extract_json(content)
+    if data is None:
+        logger.warning("Failed to extract JSON from LLM response: %s", content[:200])
+        return glitch_response("LLM 返回无效 JSON")
 
-
-def _mock_response(
-    message: str,
-    pet_state: PetState,
-    memories: list[MemoryEntry] | None = None,
-) -> ChatResponse:
-    """Generate a response using the modular agent pipeline (no LLM)."""
-    # Step 1: Intent
-    intent = detect_intent(message)
-
-    # Step 2: Emotion
-    emotion = detect_emotion(message, intent, pet_state)
-
-    # Step 3: Action
-    action = select_action(message, intent, emotion, pet_state)
-
-    # Step 4: State delta
-    state_delta = compute_state_delta(action, emotion, pet_state)
-
-    # Step 5: Memory decision
-    memory = decide_memory(message, intent, pet_state)
-
-    # Step 6: Reply
-    reply = generate_reply(message, intent, emotion, pet_state)
-
-    # Build trace
-    intent_labels = {
-        "greeting": "detected greeting",
-        "sad": "detected sadness/distress",
-        "question": "detected question",
-        "default": "general conversation",
-    }
-    trace = [
-        TraceEntry(module="intent_agent", message=f"{intent_labels.get(intent, intent)}"),
-        TraceEntry(module="emotion_agent", message=f"user mood {emotion}"),
-        TraceEntry(module="action_agent", message=f"selected {action}"),
-        TraceEntry(module="memory_agent", message="memory saved" if memory.should_save else "no stable memory"),
-        TraceEntry(module="root_agent", message="response assembled via mock pipeline"),
-    ]
-
-    return ChatResponse(
-        reply=reply,
-        emotion=emotion,
-        action=action,
-        voice_style="soft_robotic",
-        state_delta=state_delta,
-        memory=memory,
-        trace=trace,
-    )
-
-
-async def generate_response(
-    message: str,
-    pet_state: PetState,
-    history: list[ConversationMessage],
-    memories: list[MemoryEntry] | None = None,
-) -> ChatResponse:
-    """Main entry point — returns a ChatResponse via mock or LLM path."""
-    from app import config
-
-    if not config.LLM_API_KEY:
-        logger.info("No LLM_API_KEY set, using mock pipeline")
-        return _mock_response(message, pet_state, memories)
-
-    try:
-        return await _call_llm(message, pet_state, history, memories)
-    except Exception:
-        logger.exception("LLM call failed, falling back to fallback response")
-        return fallback_response()
+    return _validate_and_build_response(data, trace)
