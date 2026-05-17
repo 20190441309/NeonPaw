@@ -1,4 +1,4 @@
-import { ChatRequest, ChatResponse } from "./types";
+import { ChatRequest, ChatResponse, HealthStatus } from "./types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -22,4 +22,17 @@ export async function callChatApi(request: ChatRequest): Promise<ChatResponse> {
   }
 
   return res.json();
+}
+
+export async function callHealthApi(): Promise<HealthStatus | null> {
+  try {
+    const res = await fetch(`${API_URL}/api/health`, {
+      method: "GET",
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
 }

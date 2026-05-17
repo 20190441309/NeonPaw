@@ -81,6 +81,28 @@ export interface ChatRequest {
   memories: MemoryEntry[];
 }
 
+export interface HealthStatus {
+  status: string;
+  uptime_seconds: number;
+  llm: {
+    provider: string;
+    model: string;
+    base_url: string;
+    configured: boolean;
+    mode: "llm" | "mock";
+  };
+  speech: {
+    stt: string;
+    tts: string;
+    backend_stt: string | null;
+    backend_tts: string | null;
+  };
+  memory: {
+    backend: string;
+    server_storage: boolean;
+  };
+}
+
 export const DEFAULT_PET_STATE: PetState = {
   name: "NEON PAW",
   mode: "sleeping",

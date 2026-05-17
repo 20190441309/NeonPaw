@@ -1,18 +1,16 @@
 "use client";
 
-import { TraceEntry } from "@/lib/types";
+import { TraceEntry, HealthStatus } from "@/lib/types";
 
 interface Props {
   trace: TraceEntry[];
   isConnected: boolean;
   memoryCount?: number;
+  health?: HealthStatus | null;
 }
 
-export default function StatusHint({ trace, isConnected, memoryCount }: Props) {
+export default function StatusHint({ trace, isConnected, memoryCount, health }: Props) {
   const isFallback = trace.some((t) => t.module === "fallback");
-  const isLlm = trace.some(
-    (t) => t.module === "root_agent" && t.message.includes("LLM")
-  );
 
   const backendLabel = !isConnected
     ? "OFFLINE"
@@ -26,6 +24,10 @@ export default function StatusHint({ trace, isConnected, memoryCount }: Props) {
       ? "text-yellow-400/70"
       : "text-[var(--terminal-text)]/50";
 
+  const llmMode = health?.llm.mode;
+  const llmProvider = health?.llm.provider;
+  const uptime = health?.uptime_seconds;
+
   return (
     <div className="flex items-center gap-3">
       <span className="flex items-center gap-1">
@@ -36,8 +38,19 @@ export default function StatusHint({ trace, isConnected, memoryCount }: Props) {
         />
         <span className={backendColor}>{backendLabel}</span>
       </span>
-      {isLlm && (
-        <span className="opacity-30">LLM</span>
+      {llmMode && (
+        <span className={llmMode === "mock" ? "text-yellow-400/50" : "text-[var(--terminal-text)]/30"}>
+          {llmMode === "mock" ? "MOCK" : (llmProvider?.toUpperCase() ?? "LLM")}
+        </span>
+      )}
+      {uptime != null && uptime > 0 && (
+        <span className="opacity-20">
+          {uptime >= 3600
+            ? `${Math.floor(uptime / 3600)}h`
+            : uptime >= 60
+              ? `${Math.floor(uptime / 60)}m`
+              : `${Math.floor(uptime)}s`}
+        </span>
       )}
       {memoryCount != null && memoryCount > 0 && (
         <span className="opacity-30">MEM:{memoryCount}</span>
