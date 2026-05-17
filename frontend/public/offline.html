@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NEON PAW // OFFLINE</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a0a;
+      color: #00ffcc;
+      font-family: 'Courier New', 'Consolas', monospace;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 16px;
+    }
+    .container {
+      max-width: 400px;
+      width: 100%;
+      border: 1px solid rgba(0, 255, 204, 0.2);
+      border-radius: 2px;
+      padding: 24px;
+      text-align: center;
+    }
+    .title {
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      opacity: 0.5;
+      margin-bottom: 16px;
+    }
+    .pet {
+      font-size: 24px;
+      line-height: 1.4;
+      margin: 16px 0;
+    }
+    .status {
+      font-size: 12px;
+      letter-spacing: 0.1em;
+      margin-bottom: 8px;
+    }
+    .message {
+      font-size: 10px;
+      opacity: 0.5;
+      line-height: 1.6;
+    }
+    .retry {
+      display: inline-block;
+      margin-top: 16px;
+      padding: 4px 12px;
+      border: 1px solid rgba(0, 255, 204, 0.3);
+      background: transparent;
+      color: #00ffcc;
+      font-family: inherit;
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      opacity: 0.5;
+      transition: opacity 0.2s;
+    }
+    .retry:hover { opacity: 1; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="title">NEON PAW // OFFLINE</div>
+    <div class="pet">
+      /\_/\<br>
+      ( -.- )<br>
+      &gt; ^ &lt;
+    </div>
+    <div class="status">SIGNAL LOST</div>
+    <div class="message">
+      NEON PAW is unreachable right now.<br>
+      Check your connection and try again.
+    </div>
+    <button class="retry" onclick="location.reload()">RETRY</button>
+  </div>
+  <script>
+    window.addEventListener("online", () => location.reload());
+  </script>
+</body>
+</html>
