@@ -36,7 +36,7 @@ interface PendingSpeech {
   source: "click" | "inline" | "session";
 }
 
-const WAKE_MODE_STORAGE_KEY = "neon_paw_wake_mode";
+const WAKE_MODE_STORAGE_KEY = "neon_paw_settings_wake_mode";
 const WAKE_MODE_CHANGE_EVENT = "neon_paw_wake_mode_change";
 
 function getWakeModeSnapshot(): boolean {

@@ -36,7 +36,7 @@ export const SPEECH_LANGUAGES: SpeechLanguage[] = [
 
 export const DEFAULT_LANGUAGE: SpeechLanguageCode = "zh-CN";
 
-const STORAGE_KEY = "neon_paw_speech_language";
+const STORAGE_KEY = "neon_paw_settings_language";
 
 /**
  * Get saved language preference from localStorage
