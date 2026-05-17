@@ -49,6 +49,7 @@ export interface ChatMessage {
 export interface TraceEntry {
   module: string;
   message: string;
+  level?: "info" | "warning" | "error";
 }
 
 export interface StateDelta {
@@ -69,9 +70,15 @@ export interface ChatResponse {
   trace: TraceEntry[];
 }
 
+export type MemoryCategory = "name" | "preference" | "goal" | "habit" | "project" | "custom";
+
 export interface MemoryEntry {
+  id?: number;
   content: string;
   createdAt: string;
+  created_at?: string;
+  category?: MemoryCategory;
+  pinned?: boolean;
 }
 
 export interface ChatRequest {
