@@ -77,7 +77,13 @@ export function useSpeechSynthesis(language: SpeechLanguageCode = "zh-CN") {
               speakWithBrowser(text, onEnd);
             };
 
-            await audio.play();
+            try {
+              await audio.play();
+            } catch (e) {
+              console.error("[TTS] playback failed:", e);
+              URL.revokeObjectURL(url);
+              speakWithBrowser(text, onEnd);
+            }
             return;
           }
         } catch (err) {
