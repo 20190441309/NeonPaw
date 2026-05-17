@@ -1,5 +1,5 @@
-const CACHE_NAME = "neon-paw-v1";
-const STATIC_ASSETS = ["/", "/icon-192.png", "/icon-512.png"];
+const CACHE_NAME = "neon-paw-v2";
+const STATIC_ASSETS = ["/", "/offline.html", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -19,6 +19,7 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
+
   // Network-first for API calls
   if (url.pathname.startsWith("/api/")) {
     event.respondWith(
@@ -26,7 +27,24 @@ self.addEventListener("fetch", (event) => {
     );
     return;
   }
-  // Cache-first for static assets
+
+  // Navigation: network-first, fallback to cache, then offline page
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          return response;
+        })
+        .catch(() =>
+          caches.match(event.request).then((cached) => cached || caches.match("/offline.html"))
+        )
+    );
+    return;
+  }
+
+  // Static assets: cache-first
   event.respondWith(
     caches.match(event.request).then((cached) => cached || fetch(event.request))
   );
