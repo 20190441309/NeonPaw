@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
+    id: "/",
     name: "NEON PAW // Terminal Pet OS",
     short_name: "NEON PAW",
     description: "ADK-ready AI terminal pet with voice interaction",
