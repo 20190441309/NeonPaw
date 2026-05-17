@@ -57,12 +57,12 @@ def glitch_response(error_message: str = "Unknown error") -> ChatResponse:
 def _extract_reasoning_steps(content: str) -> list[TraceEntry]:
     """Extract CoT reasoning steps as trace entries from LLM response."""
     patterns = {
-        "intent": r"\[INTENT:\s*\w+\]\s*(.+?)(?=\[|$)",
-        "emotion": r"\[EMOTION:\s*\w+(?:,\s*强度\d+)?\]\s*(.+?)(?=\[|$)",
-        "action": r"\[ACTION:\s*\w+\]\s*(.+?)(?=\[|$)",
-        "state_delta": r"\[STATE:\s*[^\]]+\]\s*(.+?)(?=\[|$)",
-        "persona": r"\[REPLY:\s*.+?\]\s*(.+?)(?=\[|$)",
-        "memory": r"\[MEMORY:\s*\w+\]\s*(.+?)(?=\[|$)",
+        "intent": r"\[INTENT:\s*\w+\]\s*([^\[]+?)(?=\[|$)",
+        "emotion": r"\[EMOTION:\s*\w+(?:,\s*强度\d+)?\]\s*([^\[]+?)(?=\[|$)",
+        "action": r"\[ACTION:\s*\w+\]\s*([^\[]+?)(?=\[|$)",
+        "state_delta": r"\[STATE:\s*[^\]]+\]\s*([^\[]+?)(?=\[|$)",
+        "persona": r"\[REPLY:\s*[^\]]*\]\s*([^\[]+?)(?=\[|$)",
+        "memory": r"\[MEMORY:\s*\w+\]\s*([^\[]+?)(?=\[|$)",
     }
 
     trace = []
