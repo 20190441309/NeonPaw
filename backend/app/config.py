@@ -22,3 +22,11 @@ TTS_DEFAULT_VOICE = os.getenv("TTS_DEFAULT_VOICE", "default")
 TTS_DEVICE = os.getenv("TTS_DEVICE", "cuda")
 
 SPEECH_FALLBACK_TO_BROWSER = os.getenv("SPEECH_FALLBACK_TO_BROWSER", "true").lower() == "true"
+
+# TTS WAV output parameters
+TTS_SAMPLE_RATE = int(os.getenv("TTS_SAMPLE_RATE", "22050"))
+TTS_CHANNELS = int(os.getenv("TTS_CHANNELS", "1"))
+TTS_SAMPLE_WIDTH = int(os.getenv("TTS_SAMPLE_WIDTH", "2"))
+
+# Upload limits
+SPEECH_MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
