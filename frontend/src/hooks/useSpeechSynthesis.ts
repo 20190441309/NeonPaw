@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { type SpeechLanguageCode, getLanguageConfig } from "@/lib/speechLanguages";
 
-export function useSpeechSynthesis() {
+export function useSpeechSynthesis(language: SpeechLanguageCode = "zh-CN") {
   const [isSpeaking, setIsSpeaking] = useState(false);
 
   const isSupported =
@@ -17,13 +18,16 @@ export function useSpeechSynthesis() {
 
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = "zh-CN";
+      const langConfig = getLanguageConfig(language);
+      utterance.lang = langConfig.ttsCode;
       utterance.rate = 1.0;
       utterance.pitch = 1.1;
 
+      // Find appropriate voice for the selected language
       const voices = window.speechSynthesis.getVoices();
-      const zhVoice = voices.find((v) => v.lang.startsWith("zh"));
-      if (zhVoice) utterance.voice = zhVoice;
+      const langPrefix = langConfig.ttsCode.split("-")[0];
+      const matchingVoice = voices.find((v) => v.lang.startsWith(langPrefix));
+      if (matchingVoice) utterance.voice = matchingVoice;
 
       utterance.onstart = () => setIsSpeaking(true);
       utterance.onend = () => {

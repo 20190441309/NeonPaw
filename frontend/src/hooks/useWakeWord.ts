@@ -8,8 +8,8 @@ import {
   type SpeechRecognitionLike,
 } from "@/lib/speechRecognitionTypes";
 import { normalizeWakeText, splitWakePhraseAndCommand } from "@/lib/wakePhrases";
-
-const STOP_PHRASES = ["先这样", "不用了", "结束对话", "退出", "stop", "sleep"];
+import { isStopPhrase } from "@/lib/stopPhrases";
+import { type SpeechLanguageCode, getLanguageConfig } from "@/lib/speechLanguages";
 
 const COMMAND_TIMEOUT_MS = 10000;   // 10s to say a command after wake
 const SESSION_TIMEOUT_MS = 25000;   // 25s silence ends session
@@ -70,10 +70,6 @@ function extractCommand(transcript: string): WakeResult | null {
   };
 }
 
-function isStopPhrase(text: string): boolean {
-  const trimmed = text.trim().toLowerCase();
-  return STOP_PHRASES.some((p) => trimmed === p || trimmed.includes(p));
-}
 
 interface Options {
   enabled: boolean;
@@ -81,13 +77,14 @@ interface Options {
   onCommand: (text: string) => void;
   onCommandTimeout: () => void;
   isSupported: boolean;
+  language?: SpeechLanguageCode;
 }
 
 export type WakeMode = "idle" | "wake_listening" | "command_listening" | "session_listening";
 
 type StartListeningFn = () => void;
 
-export function useWakeWord({ enabled, onWake, onCommand, onCommandTimeout, isSupported }: Options) {
+export function useWakeWord({ enabled, onWake, onCommand, onCommandTimeout, isSupported, language = "zh-CN" }: Options) {
   const [isActive, setIsActive] = useState(false);
   const [mode, setMode] = useState<WakeMode>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -98,6 +95,7 @@ export function useWakeWord({ enabled, onWake, onCommand, onCommandTimeout, isSu
   const onWakeRef = useRef(onWake);
   const onCommandRef = useRef(onCommand);
   const onCommandTimeoutRef = useRef(onCommandTimeout);
+  const languageRef = useRef(language);
   const pausedRef = useRef(false);
   const modeRef = useRef<WakeMode>("idle");
   const sessionActiveRef = useRef(false);
@@ -124,7 +122,8 @@ export function useWakeWord({ enabled, onWake, onCommand, onCommandTimeout, isSu
     onWakeRef.current = onWake;
     onCommandRef.current = onCommand;
     onCommandTimeoutRef.current = onCommandTimeout;
-  }, [enabled, onWake, onCommand, onCommandTimeout]);
+    languageRef.current = language;
+  }, [enabled, onWake, onCommand, onCommandTimeout, language]);
 
   // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -230,7 +229,7 @@ export function useWakeWord({ enabled, onWake, onCommand, onCommandTimeout, isSu
     setModeState("wake_listening");
 
     const recognition = createRecognition(
-      "zh-CN", true, true,
+      getLanguageConfig(languageRef.current).sttCode, true, true,
       (event: SpeechRecognitionEventLike) => {
         if (pausedRef.current || modeRef.current !== "wake_listening") return;
 
@@ -324,7 +323,7 @@ export function useWakeWord({ enabled, onWake, onCommand, onCommandTimeout, isSu
     }, COMMAND_TIMEOUT_MS);
 
     const recognition = createRecognition(
-      "zh-CN", false, false,
+      getLanguageConfig(languageRef.current).sttCode, false, false,
       (event: SpeechRecognitionEventLike) => {
         if (pausedRef.current || modeRef.current !== "command_listening") return;
 
@@ -408,7 +407,7 @@ export function useWakeWord({ enabled, onWake, onCommand, onCommandTimeout, isSu
     }, SESSION_TIMEOUT_MS);
 
     const recognition = createRecognition(
-      "zh-CN", false, false,
+      getLanguageConfig(languageRef.current).sttCode, false, false,
       (event: SpeechRecognitionEventLike) => {
         if (pausedRef.current || modeRef.current !== "session_listening") return;
 

@@ -9,8 +9,9 @@ import {
   type SpeechRecognitionEventLike,
   type SpeechRecognitionLike,
 } from "@/lib/speechRecognitionTypes";
+import { type SpeechLanguageCode, getLanguageConfig } from "@/lib/speechLanguages";
 
-export function useSpeechRecognition() {
+export function useSpeechRecognition(language: SpeechLanguageCode = "zh-CN") {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [interimTranscript, setInterimTranscript] = useState("");
@@ -64,7 +65,8 @@ export function useSpeechRecognition() {
       onLowConfidenceRef.current = onLowConfidence || null;
 
       const recognition = new SpeechRecognitionCtor();
-      recognition.lang = "zh-CN";
+      const langConfig = getLanguageConfig(language);
+      recognition.lang = langConfig.sttCode;
       recognition.continuous = false;
       recognition.interimResults = true;
 
