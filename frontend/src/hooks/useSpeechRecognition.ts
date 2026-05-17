@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { normalizeSpeechText, isLowConfidenceSpeech } from "@/lib/speechUtils";
+import { callSttApi, callSpeechStatusApi } from "@/lib/api";
 import {
   getSpeechRecognitionConstructor,
   hasSpeechRecognitionSupport,
@@ -21,6 +22,7 @@ export function useSpeechRecognition(language: SpeechLanguageCode = "zh-CN") {
   // Default true so SSR and initial client render match.
   // Updated to real value after hydration in useEffect.
   const [isSupported, setIsSupported] = useState(true);
+  const [backendAvailable, setBackendAvailable] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
   // Refs for callback access inside onresult
@@ -42,7 +44,15 @@ export function useSpeechRecognition(language: SpeechLanguageCode = "zh-CN") {
     }
   }, []);
 
-  const start = useCallback(
+  // Check backend speech service availability on mount
+  useEffect(() => {
+    callSpeechStatusApi().then(status => {
+      setBackendAvailable(status?.stt?.available ?? false);
+    });
+  }, []);
+
+  // Browser Web Speech API recognition (existing logic)
+  const startBrowserRecognition = useCallback(
     (
       onResult: (text: string, confidence: number | null) => void,
       onLowConfidence?: (text: string, confidence: number | null) => void,
@@ -103,7 +113,7 @@ export function useSpeechRecognition(language: SpeechLanguageCode = "zh-CN") {
           setLastConfidence(finalConfidence);
 
           if (process.env.NODE_ENV === "development") {
-            console.log("[STT] final:", rawText, "→ normalized:", normalized, "confidence:", finalConfidence);
+            console.log("[STT] final:", rawText, "-> normalized:", normalized, "confidence:", finalConfidence);
           }
 
           // Check if low confidence
@@ -153,7 +163,95 @@ export function useSpeechRecognition(language: SpeechLanguageCode = "zh-CN") {
       recognitionRef.current = recognition;
       recognition.start();
     },
-    [isSupported]
+    [isSupported, language],
+  );
+
+  // Backend recording: record audio via MediaRecorder, send to backend STT
+  const startBackendRecording = useCallback(
+    async (
+      onResult: (text: string, confidence: number | null) => void,
+      onLowConfidence?: (text: string, confidence: number | null) => void,
+    ) => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
+
+        const chunks: Blob[] = [];
+        mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
+
+        setIsListening(true);
+        setTranscript("");
+        setInterimTranscript("");
+        setError(null);
+
+        mediaRecorder.onstop = async () => {
+          setIsListening(false);
+          const audioBlob = new Blob(chunks, { type: "audio/webm" });
+          stream.getTracks().forEach(t => t.stop());
+
+          const result = await callSttApi(audioBlob);
+          if (result && result.text) {
+            const normalized = normalizeSpeechText(result.text);
+            setTranscript(normalized);
+            setLastRawTranscript(result.text);
+            setLastConfidence(result.confidence);
+
+            if (process.env.NODE_ENV === "development") {
+              console.log("[STT] backend result:", result.text, "-> normalized:", normalized, "confidence:", result.confidence);
+            }
+
+            const low = isLowConfidenceSpeech(
+              normalized,
+              result.confidence,
+              lastUserMessageRef.current,
+              lastMessageTimeRef.current,
+            );
+
+            if (low && onLowConfidence) {
+              onLowConfidence(normalized, result.confidence);
+            } else {
+              lastUserMessageRef.current = normalized;
+              lastMessageTimeRef.current = Date.now();
+              onResult(normalized, result.confidence);
+            }
+          } else {
+            setError("后端语音识别未返回结果");
+          }
+        };
+
+        mediaRecorder.onerror = () => {
+          setIsListening(false);
+          stream.getTracks().forEach(t => t.stop());
+          setError("录音出错");
+        };
+
+        mediaRecorder.start();
+
+        // Store reference for stopping (compatible with the existing stop() API)
+        recognitionRef.current = { stop: () => mediaRecorder.stop() } as SpeechRecognitionLike;
+      } catch (err) {
+        console.error("[STT] backend recording failed, falling back to browser:", err);
+        setError("后端录音失败，使用浏览器识别");
+        // Fallback to browser recognition
+        startBrowserRecognition(onResult, onLowConfidence);
+      }
+    },
+    [startBrowserRecognition],
+  );
+
+  // Public start() - routes to backend or browser based on availability
+  const start = useCallback(
+    (
+      onResult: (text: string, confidence: number | null) => void,
+      onLowConfidence?: (text: string, confidence: number | null) => void,
+    ) => {
+      if (backendAvailable) {
+        startBackendRecording(onResult, onLowConfidence);
+      } else {
+        startBrowserRecognition(onResult, onLowConfidence);
+      }
+    },
+    [backendAvailable, startBackendRecording, startBrowserRecognition],
   );
 
   const stop = useCallback(() => {
@@ -174,6 +272,7 @@ export function useSpeechRecognition(language: SpeechLanguageCode = "zh-CN") {
     interimTranscript,
     error,
     isSupported,
+    backendAvailable,
     lastConfidence,
     lastRawTranscript,
     start,
