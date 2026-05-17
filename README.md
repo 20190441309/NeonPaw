@@ -1,20 +1,20 @@
 <div align="center">
 
 <a href="https://github.com/20190441309/NeonPaw">
-  <img src="https://capsule-render.vercel.app/api?type=waving&color=0:0a0a0a,50:00ffcc,100:00ffcc&height=220&section=header&text=NEON%20PAW&fontSize=80&fontColor=00ffcc&fontAlignY=35&desc=ADK-Ready%20AI%20Terminal%20Pet&descSize=18&descAlignY=55&animation=fadeIn" width="100%">
+  <img src="https://capsule-render.vercel.app/api?type=waving&color=0:0a0a0a,50:0a9396,100:0a9396&height=220&section=header&text=NEON%20PAW&fontSize=80&fontColor=0a9396&fontAlignY=35&desc=ADK-Ready%20AI%20Terminal%20Pet&descSize=18&descAlignY=55&animation=fadeIn" width="100%">
 </a>
 
 <br>
 
-![Typing SVG](https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=22&duration=3000&pause=1000&color=00FFCC&center=true&vCenter=true&multiline=true&repeat=true&width=600&height=100&lines=Welcome+to+NEON+PAW;A+Cyber+Terminal+Pet+Living+Inside+Your+Screen;Voice+In.+Pet+Brain.+ASCII+Out.+Voice+Back.)
+![Typing SVG](https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=22&duration=3000&pause=1000&color=0a9396&center=true&vCenter=true&multiline=true&repeat=true&width=600&height=100&lines=Welcome+to+NEON+PAW;A+Cyber+Terminal+Pet+Living+Inside+Your+Screen;Voice+In.+Pet+Brain.+ASCII+Out.+Voice+Back.)
 
 <br>
 
-![License](https://img.shields.io/github/license/20190441309/NeonPaw?style=for-the-badge&color=00ffcc&labelColor=0a0a0a)
-![Stars](https://img.shields.io/github/stars/20190441309/NeonPaw?style=for-the-badge&color=FFD700&labelColor=0a0a0a)
-![Forks](https://img.shields.io/github/forks/20190441309/NeonPaw?style=for-the-badge&color=00ffcc&labelColor=0a0a0a)
-![Issues](https://img.shields.io/github/issues/20190441309/NeonPaw?style=for-the-badge&color=FF6B6B&labelColor=0a0a0a)
-![Last Commit](https://img.shields.io/github/last-commit/20190441309/NeonPaw?style=for-the-badge&color=00ffcc&labelColor=0a0a0a)
+![License](https://img.shields.io/github/license/20190441309/NeonPaw?style=for-the-badge&color=0a9396&labelColor=0a0a0a)
+![Stars](https://img.shields.io/github/stars/20190441309/NeonPaw?style=for-the-badge&color=d4a574&labelColor=0a0a0a)
+![Forks](https://img.shields.io/github/forks/20190441309/NeonPaw?style=for-the-badge&color=0a9396&labelColor=0a0a0a)
+![Issues](https://img.shields.io/github/issues/20190441309/NeonPaw?style=for-the-badge&color=bc6c7a&labelColor=0a0a0a)
+![Last Commit](https://img.shields.io/github/last-commit/20190441309/NeonPaw?style=for-the-badge&color=0a9396&labelColor=0a0a0a)
 
 <br>
 
@@ -481,9 +481,9 @@ NeonPaw/
 
 <div align="center">
 
-![Backend Tests](https://img.shields.io/badge/Backend-122%20passed-00CC00?style=for-the-badge&labelColor=0a0a0a)
-![Lint](https://img.shields.io/badge/Lint-0%20errors-00CC00?style=for-the-badge&labelColor=0a0a0a)
-![Build](https://img.shields.io/badge/Build-Passing-00CC00?style=for-the-badge&labelColor=0a0a0a)
+![Backend Tests](https://img.shields.io/badge/Backend-122%20passed-588157?style=for-the-badge&labelColor=0a0a0a)
+![Lint](https://img.shields.io/badge/Lint-0%20errors-588157?style=for-the-badge&labelColor=0a0a0a)
+![Build](https://img.shields.io/badge/Build-Passing-588157?style=for-the-badge&labelColor=0a0a0a)
 
 </div>
 
@@ -535,7 +535,7 @@ git push origin feature/amazing-feature
 
 <div align="center">
 
-![License: MIT](https://img.shields.io/badge/License-MIT-00ffcc?style=for-the-badge&labelColor=0a0a0a)
+![License: MIT](https://img.shields.io/badge/License-MIT-0a9396?style=for-the-badge&labelColor=0a0a0a)
 
 </div>
 
@@ -549,7 +549,7 @@ git push origin feature/amazing-feature
 
 <br>
 
-![Visitor Count](https://komarev.com/ghpvc/?username=20190441309&repo=NeonPaw&style=for-the-badge&color=00ffcc&label=PROFILE+VIEWS&labelColor=0a0a0a)
+![Visitor Count](https://komarev.com/ghpvc/?username=20190441309&repo=NeonPaw&style=for-the-badge&color=0a9396&label=PROFILE+VIEWS&labelColor=0a0a0a)
 
 <br>
 
