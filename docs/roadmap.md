@@ -56,11 +56,11 @@ These tasks make the current browser-based experience feel smoother without requ
   Handle near misses such as "小爪行行" or similar recognition errors around "小爪醒醒".
 - [x] Add speech confidence visualization.
   Show a small signal meter, waveform, or confidence bar while listening.
-- [ ] Improve stop phrase handling.
+- [x] Improve stop phrase handling.
   Replace broad substring matching with more intentional session-ending detection.
-- [ ] Add speech language controls.
+- [x] Add speech language controls.
   Support Chinese, English, and possibly an auto mode instead of hardcoding `zh-CN`.
-- [ ] Expand mock-mode replies.
+- [x] Expand mock-mode replies.
   Make no-API-key demos feel less repetitive and more pet-like.
 - [ ] Tune low-confidence heuristics with real usage.
   Expand filler words, duplicate detection, and short-utterance rules based on actual transcripts.
@@ -73,6 +73,12 @@ The app still works in click-to-talk and wake-mode sessions, and low-confidence 
 
 Speech signal visualization completed on 2026-05-12. The UI now shows a terminal-style signal panel during click-to-talk, wake listening, session listening, and confirmation states.
 
+Stop phrase handling improved on 2026-05-17. Multi-layer detection with exact match, suffix patterns, and negative boundary checking.
+
+Speech language controls completed on 2026-05-17. LanguageSelector component + useSpeechLanguage hook integrated with useSpeechRecognition.
+
+Mock-mode replies expanded on 2026-05-17. persona.py now provides 50+ varied replies across 11 intent categories, randomly selected and emotion-aware. Integrated into root_brain fallback path.
+
 ---
 
 ## P2: Add Backend Capabilities
@@ -81,13 +87,11 @@ These tasks move important runtime capabilities out of browser-only APIs.
 
 - [ ] Decide and implement the state API direction.
   Either implement `GET /api/state` and `POST /api/state`, or formally keep state frontend-owned and remove stale state API references.
-- [ ] Add backend STT with `/api/stt`.
-  Candidate engines: Whisper, Gemini STT, Google Speech-to-Text, or FunASR.
-- [ ] Add backend TTS with `/api/tts`.
-  Candidate engines: Edge TTS, OpenAI TTS, ElevenLabs, Google TTS, or Gemini TTS.
-- [ ] Build a real LLM provider adapter layer.
-  `LLM_PROVIDER` exists in config, but provider dispatch still needs implementation.
-- [ ] Add backend health checks.
+- [x] Add backend STT with `/api/stt`.
+  Implemented using FunASR with GPU support.
+- [x] Add backend TTS with `/api/tts`.
+  Implemented using CosyVoice with GPU support.
+- [x] Add backend health checks.
   Example: `/api/health` returns API status, LLM config state, STT/TTS availability, and memory backend status.
 - [ ] Improve backend fallback reporting.
   Return more specific trace entries when the LLM fails, JSON validation fails, or a provider is unavailable.
@@ -102,15 +106,15 @@ The app can run with either browser speech APIs or backend speech APIs, and the 
 
 These tasks turn localStorage memory into a more durable and user-controllable memory system.
 
-- [ ] Add server-side memory APIs.
+- [x] Add server-side memory APIs.
   Start with SQLite or another lightweight local store before adding cloud sync.
-- [ ] Add memory categories.
+- [x] Add memory categories.
   Separate names, preferences, goals, habits, project context, and custom notes.
-- [ ] Add memory editing UI.
+- [x] Add memory editing UI.
   Let the user edit, delete, pin, and inspect saved memories.
-- [ ] Add memory merge and dedupe.
+- [x] Add memory merge and dedupe.
   Avoid repeated memories such as multiple versions of "我叫小野".
-- [ ] Add memory export/import.
+- [x] Add memory export/import.
   Useful before introducing accounts or cloud sync.
 - [ ] Optional: add vector memory retrieval.
   Use embeddings once conversation history and memories become too large for simple list injection.
@@ -119,19 +123,23 @@ These tasks turn localStorage memory into a more durable and user-controllable m
 
 The user can see and control what NEON PAW remembers, and memory survives beyond a single browser's localStorage when server memory is enabled.
 
+**Progress:** Server-side SQLite memory completed on 2026-05-17. Backend provides CRUD API with categories (name/preference/goal/habit/project/custom), deduplication, and pinning. Frontend useMemory hook auto-detects backend availability and falls back to localStorage. MemoryPanel supports inline editing, category filtering, and server/local status display.
+
 ---
 
 ## P4: Grow The Agent Brain
 
 These tasks make NEON PAW more capable while preserving the structured response contract.
 
-- [ ] Strengthen module-level RootBrain outputs.
-  Intent, emotion, action, state, memory, and persona decisions should be more explainable and testable.
+- [x] LLM Provider adapter layer.
+  Unified interface supporting DeepSeek, Gemini, Kimi, GLM, Qwen, OpenAI via config-only switching.
+- [x] Strengthen module-level RootBrain outputs.
+  Sub-module validation layer cross-checks LLM output against intent/action/state/memory modules.
 - [ ] Add task-oriented companion modes.
   Examples: study buddy, coding buddy, daily check-in, reminder companion, reading assistant.
 - [ ] Add a tool invocation layer.
   Prepare for calendar, files, search, MCP, and user-approved external actions.
-- [ ] Add richer Agent Trace modes.
+- [x] Add richer Agent Trace modes.
   Provide a simple trace for normal users and a detailed trace for developer mode.
 - [ ] Evaluate real Google ADK runtime integration.
   The current architecture is ADK-ready, but not using Google ADK runtime yet.
@@ -152,7 +160,7 @@ These tasks turn the project from a local web demo into something easier to use 
   Include manifest, icons, mobile polish, and an installable shell.
 - [ ] Build an Electron desktop version.
   NEON PAW should be able to behave like a small desktop companion.
-- [ ] Add a settings screen.
+- [x] Add a settings screen.
   Configure API keys, model provider, voice mode, wake phrase, memory, privacy, and developer options.
 - [ ] Deploy the backend.
   Start with a simple hosted FastAPI deployment or a local-first desktop backend.
@@ -179,7 +187,9 @@ A new user can install or open NEON PAW, configure it safely, and understand wha
 Recommended next sprint:
 
 ```text
-P2 provider adapter design
-P2 backend health checks
-P1 improve stop phrase handling
+P2 backend STT/TTS
+P1 expand mock-mode replies
+P4 strengthen RootBrain outputs
 ```
+
+详细的剩余功能 ROI 分析见 [Next Features Analysis](next-features-analysis.md)。
