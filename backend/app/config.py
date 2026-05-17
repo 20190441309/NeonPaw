@@ -14,6 +14,7 @@ STT_ENABLED = os.getenv("STT_ENABLED", "true").lower() == "true"
 STT_MODEL = os.getenv("STT_MODEL", "paraformer-zh")
 STT_VAD_MODEL = os.getenv("STT_VAD_MODEL", "fsmn-vad")
 STT_PUNC_MODEL = os.getenv("STT_PUNC_MODEL", "ct-punc")
+DEVICE = os.getenv("DEVICE", "cuda")
 
 TTS_ENABLED = os.getenv("TTS_ENABLED", "true").lower() == "true"
 TTS_MODEL = os.getenv("TTS_MODEL", "CosyVoice-300M")
