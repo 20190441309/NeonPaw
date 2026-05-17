@@ -51,7 +51,7 @@ class TTSService:
                 config.TTS_MODEL,
                 config.TTS_DEVICE,
             )
-            self._model = CosyVoice(config.TTS_MODEL)
+            self._model = CosyVoice(config.TTS_MODEL, device=config.TTS_DEVICE)
             self._loaded = True
             logger.info("CosyVoice model loaded successfully on %s.", config.TTS_DEVICE)
         except Exception as exc:

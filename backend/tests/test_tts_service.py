@@ -10,6 +10,25 @@ def test_tts_service_init():
     assert service is not None
 
 
+def test_load_model_passes_device_to_cosyvoice():
+    """Test _load_model passes TTS_DEVICE to CosyVoice constructor."""
+    mock_cosyvoice_cls = MagicMock()
+    mock_instance = MagicMock()
+    mock_cosyvoice_cls.return_value = mock_instance
+
+    service = TTSService()
+
+    with patch("app.services.tts_service.COSYVOICE_AVAILABLE", True), \
+         patch("app.config.TTS_ENABLED", True), \
+         patch("app.config.TTS_MODEL", "CosyVoice-300M"), \
+         patch("app.config.TTS_DEVICE", "cuda:1"), \
+         patch("app.services.tts_service.CosyVoice", mock_cosyvoice_cls, create=True):
+        service._load_model()
+
+    mock_cosyvoice_cls.assert_called_once_with("CosyVoice-300M", device="cuda:1")
+    assert service._model is mock_instance
+
+
 def test_tts_service_status():
     """Test TTSService returns status."""
     service = TTSService()
