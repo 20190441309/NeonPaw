@@ -103,6 +103,23 @@ export interface HealthStatus {
   };
 }
 
+export interface SttResponse {
+  text: string;
+  confidence: number;
+  engine: string;
+}
+
+export interface SpeechServiceStatus {
+  available: boolean;
+  engine: string;
+  model: string;
+}
+
+export interface SpeechStatus {
+  stt: SpeechServiceStatus;
+  tts: SpeechServiceStatus;
+}
+
 export const DEFAULT_PET_STATE: PetState = {
   name: "NEON PAW",
   mode: "sleeping",

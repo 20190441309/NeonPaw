@@ -1,4 +1,4 @@
-import { ChatRequest, ChatResponse, HealthStatus } from "./types";
+import { ChatRequest, ChatResponse, HealthStatus, SttResponse, SpeechStatus } from "./types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -27,6 +27,53 @@ export async function callChatApi(request: ChatRequest): Promise<ChatResponse> {
 export async function callHealthApi(): Promise<HealthStatus | null> {
   try {
     const res = await fetch(`${API_URL}/api/health`, {
+      method: "GET",
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function callSttApi(audioBlob: Blob): Promise<SttResponse | null> {
+  try {
+    const formData = new FormData();
+    formData.append("file", audioBlob, "recording.webm");
+
+    const res = await fetch(`${API_URL}/api/speech/stt`, {
+      method: "POST",
+      body: formData,
+      signal: AbortSignal.timeout(30000),
+    });
+
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function callTtsApi(text: string, voice: string = "default"): Promise<Blob | null> {
+  try {
+    const res = await fetch(`${API_URL}/api/speech/tts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, voice }),
+      signal: AbortSignal.timeout(30000),
+    });
+
+    if (!res.ok) return null;
+    return res.blob();
+  } catch {
+    return null;
+  }
+}
+
+export async function callSpeechStatusApi(): Promise<SpeechStatus | null> {
+  try {
+    const res = await fetch(`${API_URL}/api/speech/status`, {
       method: "GET",
       signal: AbortSignal.timeout(5000),
     });
