@@ -13,6 +13,8 @@ import FirstTimeMemoryNotice from "@/components/FirstTimeMemoryNotice";
 import WakeModeToggle from "@/components/WakeModeToggle";
 import SpeechConfirmBar from "@/components/SpeechConfirmBar";
 import SpeechSignalPanel from "@/components/SpeechSignalPanel";
+import SettingsButton from "@/components/SettingsButton";
+import SettingsPanel from "@/components/SettingsPanel";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { useCallback, useRef, useState, useEffect, useSyncExternalStore } from "react";
 import { usePetState } from "@/hooks/usePetState";
@@ -21,6 +23,7 @@ import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 import { useSpeechLanguage } from "@/hooks/useSpeechLanguage";
 import { useWakeWord, type WakeResult } from "@/hooks/useWakeWord";
+import { useSettings } from "@/hooks/useSettings";
 import { useHealthCheck } from "@/hooks/useHealthCheck";
 import { callChatApi } from "@/lib/api";
 import { isLowConfidenceSpeech, normalizeSpeechText } from "@/lib/speechUtils";
@@ -81,6 +84,13 @@ export default function Home() {
 
   // Phase 10D: pending speech confirmation
   const [pendingSpeech, setPendingSpeech] = useState<PendingSpeech | null>(null);
+
+  // Memory import result
+  const [importResult, setImportResult] = useState<{ imported: number; skipped: number } | null>(null);
+
+  // Settings
+  const { settings, update: updateSettings } = useSettings();
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Refs for values needed inside async callbacks
   const petStateRef = useRef(pet.petState);
@@ -337,6 +347,7 @@ export default function Home() {
       footerHint={footerHint}
       headerAction={
         <div className="flex items-center gap-2">
+          <SettingsButton onClick={() => setSettingsOpen(true)} />
           <LanguageSelector
             currentLanguage={speechLanguage.languageCode}
             onLanguageChange={speechLanguage.setLanguage}
@@ -362,8 +373,22 @@ export default function Home() {
       />
       <ChatTranscript messages={pet.history} />
       <PetStatusPanel state={pet.petState} />
-      <AgentTracePanel trace={pet.trace} />
-      <MemoryPanel memories={memory.memories} onRemove={memory.removeMemory} onClearAll={memory.clearMemories} />
+      <AgentTracePanel trace={pet.trace} traceMode={settings.traceMode} />
+      <MemoryPanel
+        memories={memory.memories}
+        backendAvailable={memory.backendAvailable}
+        onRemove={memory.removeMemory}
+        onUpdate={memory.updateMemory}
+        onClearAll={memory.clearMemories}
+        onExport={memory.exportMemories}
+        onImport={async (file) => {
+          setImportResult(null);
+          const result = await memory.importMemories(file);
+          setImportResult(result);
+          if (result) setTimeout(() => setImportResult(null), 4000);
+        }}
+        importResult={importResult}
+      />
       <MemoryNotification content={memory.lastSaved} onDismiss={memory.clearLastSaved} />
       {memory.firstTimeNotice && (
         <FirstTimeMemoryNotice onDismiss={memory.clearFirstTimeNotice} />
@@ -399,6 +424,12 @@ export default function Home() {
           WAKE MODE: BROWSER MIC ONLY · ACTIVE WHILE PAGE IS OPEN
         </div>
       )}
+      <SettingsPanel
+        open={settingsOpen}
+        settings={settings}
+        onUpdate={updateSettings}
+        onClose={() => setSettingsOpen(false)}
+      />
     </TerminalShell>
   );
 }
