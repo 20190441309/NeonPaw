@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import chat, health
+from app.routers import chat, health, memory, speech
 
 app = FastAPI(title="NEON PAW API")
 
@@ -14,6 +14,8 @@ app.add_middleware(
 
 app.include_router(chat.router)
 app.include_router(health.router)
+app.include_router(memory.router)
+app.include_router(speech.router)
 
 
 @app.get("/")

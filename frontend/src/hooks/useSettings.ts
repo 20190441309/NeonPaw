@@ -1,7 +1,7 @@
 // frontend/src/hooks/useSettings.ts
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import {
   type LLMProvider,
   type TraceMode,
@@ -26,29 +26,16 @@ export interface SettingsState {
 }
 
 export function useSettings() {
-  const [settings, setSettings] = useState<SettingsState>({
-    llmProvider: "deepseek",
-    llmApiKey: "",
-    llmModel: "",
-    language: "zh-CN",
-    wakeMode: false,
-    traceMode: "simple",
-    devMode: false,
-  });
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    setSettings({
-      llmProvider: getLLMProvider(),
-      llmApiKey: getLLMApiKey(),
-      llmModel: getLLMModel(),
-      language: getSpeechLanguage(),
-      wakeMode: getWakeMode(),
-      traceMode: getTraceMode(),
-      devMode: getDevMode(),
-    });
-    setLoaded(true);
-  }, []);
+  const [settings, setSettings] = useState<SettingsState>(() => ({
+    llmProvider: getLLMProvider(),
+    llmApiKey: getLLMApiKey(),
+    llmModel: getLLMModel(),
+    language: getSpeechLanguage(),
+    wakeMode: getWakeMode(),
+    traceMode: getTraceMode(),
+    devMode: getDevMode(),
+  }));
+  const [loaded] = useState(true);
 
   const update = useCallback(<K extends keyof SettingsState>(key: K, value: SettingsState[K]) => {
     setSettings((prev) => ({ ...prev, [key]: value }));

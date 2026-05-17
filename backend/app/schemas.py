@@ -34,6 +34,7 @@ class Memory(BaseModel):
 class TraceEntry(BaseModel):
     module: str
     message: str
+    level: str = "info"  # info | warning | error
 
 
 class MemoryEntry(BaseModel):

@@ -25,8 +25,10 @@ def pet_state() -> PetState:
 
 @pytest.fixture(autouse=True)
 def _force_no_api_key(monkeypatch):
-    """Ensure LLM_API_KEY is empty so tests hit the glitch path (no mock)."""
+    """Ensure LLM_API_KEY is empty so tests hit the fallback path (no LLM)."""
     monkeypatch.setenv("LLM_API_KEY", "")
+    import app.config
+    monkeypatch.setattr(app.config, "LLM_API_KEY", "")
 
 
 # -- Glitch Response ---------------------------------------------------------
@@ -73,17 +75,21 @@ def _assert_valid_response(resp: ChatResponse):
         assert isinstance(entry.message, str)
 
 
-# -- No API Key Returns Glitch -----------------------------------------------
+# -- No API Key Returns Fallback ---------------------------------------------
 
 class TestNoApiKey:
 
     @pytest.mark.asyncio
-    async def test_no_key_returns_glitch(self, pet_state: PetState):
+    async def test_no_key_returns_fallback(self, pet_state: PetState):
         resp = await generate_response("你好", pet_state, [], None)
         _assert_valid_response(resp)
-        assert resp.emotion == "glitch"
-        assert resp.action == "glitch"
-        assert "LLM_API_KEY" in resp.trace[0].message
+        # Fallback uses intent detection: "你好" → greeting → happy/wake
+        assert resp.emotion == "happy"
+        assert resp.action == "wake"
+        # Trace should include fallback module with the error reason
+        modules = [t.module for t in resp.trace]
+        assert "fallback" in modules
+        assert any("LLM_API_KEY" in t.message for t in resp.trace)
 
 
 # -- Clamp Delta -------------------------------------------------------------

@@ -203,20 +203,53 @@ class TestPersonaAgent:
 
     def test_greeting_reply(self, pet_state: PetState):
         reply = generate_reply("你好", "greeting", "happy", pet_state)
-        assert "NEON PAW" in reply
+        assert isinstance(reply, str) and len(reply) > 0
 
     def test_sad_reply(self, pet_state: PetState):
         reply = generate_reply("好累", "sad", "comforting", pet_state)
-        assert "在呢" in reply
+        assert isinstance(reply, str) and len(reply) > 0
 
     def test_question_reply(self, pet_state: PetState):
         reply = generate_reply("什么", "question", "curious", pet_state)
-        assert "想" in reply
+        assert isinstance(reply, str) and len(reply) > 0
 
     def test_default_reply(self, pet_state: PetState):
         reply = generate_reply("随便", "default", "neutral", pet_state)
-        assert "信号" in reply
+        assert isinstance(reply, str) and len(reply) > 0
 
     def test_unknown_intent_returns_default(self, pet_state: PetState):
         reply = generate_reply("test", "unknown", "neutral", pet_state)
-        assert reply == "收到你的信号了。"
+        assert isinstance(reply, str) and len(reply) > 0
+
+    def test_farewell_reply(self, pet_state: PetState):
+        reply = generate_reply("再见", "farewell", "sad", pet_state)
+        assert isinstance(reply, str) and len(reply) > 0
+
+    def test_thanks_reply(self, pet_state: PetState):
+        reply = generate_reply("谢谢", "thanks", "happy", pet_state)
+        assert isinstance(reply, str) and len(reply) > 0
+
+    def test_complaint_reply(self, pet_state: PetState):
+        reply = generate_reply("好烦", "complaint", "comforting", pet_state)
+        assert isinstance(reply, str) and len(reply) > 0
+
+    def test_request_reply(self, pet_state: PetState):
+        reply = generate_reply("帮我查一下", "request", "curious", pet_state)
+        assert isinstance(reply, str) and len(reply) > 0
+
+    def test_chitchat_reply(self, pet_state: PetState):
+        reply = generate_reply("今天天气不错", "chitchat", "neutral", pet_state)
+        assert isinstance(reply, str) and len(reply) > 0
+
+    def test_encourage_reply(self, pet_state: PetState):
+        reply = generate_reply("你真棒", "encourage", "happy", pet_state)
+        assert isinstance(reply, str) and len(reply) > 0
+
+    def test_command_reply(self, pet_state: PetState):
+        reply = generate_reply("睡觉", "command", "neutral", pet_state)
+        assert isinstance(reply, str) and len(reply) > 0
+
+    def test_replies_vary(self, pet_state: PetState):
+        """Running generate_reply multiple times should produce different replies."""
+        replies = {generate_reply("你好", "greeting", "happy", pet_state) for _ in range(20)}
+        assert len(replies) > 1, "Replies should vary across calls"

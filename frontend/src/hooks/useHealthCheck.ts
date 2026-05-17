@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { HealthStatus } from "@/lib/types";
 import { callHealthApi } from "@/lib/api";
 
@@ -8,19 +8,20 @@ const POLL_INTERVAL = 60_000;
 
 export function useHealthCheck() {
   const [health, setHealth] = useState<HealthStatus | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
+  const mountedRef = useRef(true);
 
   const check = useCallback(async () => {
     const data = await callHealthApi();
-    setHealth(data);
-    setIsConnected(data !== null);
+    if (mountedRef.current) {
+      setHealth(data);
+    }
   }, []);
 
   useEffect(() => {
     check();
     const id = setInterval(check, POLL_INTERVAL);
-    return () => clearInterval(id);
+    return () => { mountedRef.current = false; clearInterval(id); };
   }, [check]);
 
-  return { health, isConnected, refresh: check };
+  return { health, isConnected: health !== null, refresh: check };
 }

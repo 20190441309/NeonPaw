@@ -44,3 +44,6 @@ next-env.d.ts
 
 # Superpowers
 .superpowers/
+
+# SQLite database
+backend/data/*.sqlite
