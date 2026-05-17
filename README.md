@@ -265,6 +265,40 @@ trace        -> 展示开发者日志
 
 ---
 
+## Speech Services Setup
+
+MVP 默认使用浏览器原生 Web Speech API 进行语音识别和合成。如果需要更高精度的后端语音服务，可以启用 FunASR (STT) 和 CosyVoice (TTS)。
+
+### FunASR (STT)
+
+```bash
+pip install funasr
+```
+
+Models auto-download on first use. Default model is `paraformer-zh` with VAD (`fsmn-vad`) and punctuation (`ct-punc`).
+
+### CosyVoice (TTS)
+
+```bash
+git clone https://github.com/FunAudioLLM/CosyVoice.git
+cd CosyVoice
+pip install -r requirements.txt
+```
+
+### GPU Support
+
+Both services use GPU by default. Set `STT_DEVICE=cpu` and `TTS_DEVICE=cpu` for CPU-only mode.
+
+### Config
+
+Set in `.env` (copy from `.env.example`):
+
+- `STT_ENABLED=true` - Enable backend STT
+- `TTS_ENABLED=true` - Enable backend TTS
+- `SPEECH_FALLBACK_TO_BROWSER=true` - Use browser API if backend unavailable
+
+---
+
 ## 接下来想给它加什么
 
 详细优先级已经整理到 [Development Roadmap](docs/roadmap.md)。
