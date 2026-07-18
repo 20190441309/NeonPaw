@@ -47,3 +47,17 @@ next-env.d.ts
 
 # SQLite database
 backend/data/*.sqlite
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/*.iml
+android/captures/
+android/.cxx/
+*.apk
+*.aab
+*.keystore
+!android/debug.keystore

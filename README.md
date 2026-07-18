@@ -174,13 +174,13 @@
 </td>
 <td width="50%" valign="top">
 
-### 📱 PWA Ready
-- Install to home screen
+### 📱 PWA + Android
+- Install to home screen (PWA)
 - Offline fallback page
 - Service Worker caching
-- Mobile viewport optimization
-- Touch highlight removal
-- Safe area padding (notch)
+- Native Android app (Kotlin + Compose)
+- On-device STT / TTS
+- Same `/api/chat` contract as Web
 
 </td>
 </tr>
@@ -217,6 +217,14 @@
 ![OpenAI](https://img.shields.io/badge/OpenAI-Compatible-412991?style=for-the-badge&logo=openai&logoColor=white)
 ![FunASR](https://img.shields.io/badge/FunASR-STT-FF6B35?style=for-the-badge&logoColor=white)
 ![CosyVoice](https://img.shields.io/badge/CosyVoice-TTS-FF6B35?style=for-the-badge&logoColor=white)
+
+<br>
+
+### Android
+
+![Kotlin](https://img.shields.io/badge/Kotlin-2.0-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)
+![Jetpack Compose](https://img.shields.io/badge/Jetpack_Compose-UI-4285F4?style=for-the-badge&logo=jetpackcompose&logoColor=white)
+![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white)
 
 <br>
 
@@ -288,11 +296,21 @@ npm install
 npm run dev
 ```
 
-### 3️⃣ Open
+### 3️⃣ Open Web
 
 > 🌐 **http://localhost:3000**
 > 
 > Click the screen to wake up NEON PAW. Click the mic to talk.
+
+### 4️⃣ Android (optional)
+
+```bash
+# Open the android/ folder in Android Studio
+# Emulator default backend: http://10.0.2.2:8000
+# Physical device: ./gradlew :app:assembleDebug -PAPI_BASE_URL=http://192.168.x.x:8000
+```
+
+See [android/README.md](android/README.md) and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 <details>
 <summary>🔧 .env Configuration</summary>
@@ -389,7 +407,7 @@ Auto-retries when connection is restored.
 
 ```text
 NeonPaw/
-├── frontend/
+├── frontend/                        # Web client (Next.js + PWA)
 │   ├── public/
 │   │   ├── sw.js                    # Service Worker
 │   │   ├── offline.html             # Offline fallback
@@ -426,6 +444,13 @@ NeonPaw/
 │           ├── settings.ts          # Settings persistence
 │           ├── petFrames.ts         # ASCII frames
 │           └── ...
+│
+├── android/                         # Native Android client (Kotlin + Compose)
+│   └── app/src/main/java/com/neonpaw/app/
+│       ├── model/                   # Types + ASCII frames
+│       ├── data/                    # API client + pet state machine
+│       ├── speech/                  # SpeechRecognizer + TextToSpeech
+│       └── ui/                      # Terminal shell + pet screens
 │
 └── backend/
     ├── app/
