@@ -266,8 +266,7 @@ private fun FilterChip(label: String, active: Boolean, onClick: () -> Unit) {
 private fun MemoryRow(
     item: MemoryItem,
     backendAvailable: Boolean,
-    localIndex: Int,
-    onRemove: (Int) -> Unit,
+    onRemove: (MemoryItem) -> Unit,
     onTogglePin: (Int) -> Unit,
 ) {
     Row(
@@ -281,7 +280,7 @@ private fun MemoryRow(
             fontSize = 8.sp,
             modifier = Modifier.width(40.dp),
         )
-        Column(Modifier.weight(1f)) {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = buildString {
                     if (item.pinned) append("★ ")
@@ -311,13 +310,7 @@ private fun MemoryRow(
             fontSize = 8.sp,
             modifier = Modifier
                 .padding(start = 6.dp)
-                .clickable {
-                    if (backendAvailable && item.id != null) {
-                        onRemove(item.id)
-                    } else {
-                        onRemove(localIndex)
-                    }
-                },
+                .clickable { onRemove(item) },
         )
     }
 }
