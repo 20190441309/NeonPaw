@@ -27,14 +27,17 @@ android/
 │       │   │   ├── PetStateStore.kt      # SharedPreferences 持久化
 │       │   │   └── PetStateManager.kt    # 宠物状态机 ViewModel
 │       │   ├── speech/
-│       │   │   ├── SpeechManager.kt      # STT（SpeechRecognizer）
-│       │   │   └── SpeechSynthesizerManager.kt  # TTS（TextToSpeech）
+│       │   │   ├── SpeechManager.kt                 # STT（SpeechRecognizer）
+│       │   │   ├── SpeechSynthesizerManager.kt      # TTS（TextToSpeech）
+│       │   │   ├── WakeWordManager.kt               # 唤醒词 + 免提会话
+│       │   │   └── WakePhrases.kt                   # 唤醒 / 停止短语
 │       │   └── ui/
 │       │       ├── MainScreen.kt
 │       │       ├── TerminalShell.kt
 │       │       ├── ScanlineOverlay.kt
 │       │       ├── ASCIIPet.kt
 │       │       ├── VoiceButton.kt
+│       │       ├── WakeModeToggle.kt
 │       │       ├── PetStatusPanel.kt
 │       │       ├── ChatTranscript.kt
 │       │       └── AgentTracePanel.kt
