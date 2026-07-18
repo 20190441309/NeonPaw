@@ -3,7 +3,15 @@ package com.neonpaw.app.data
 import com.neonpaw.app.AppConfig
 import com.neonpaw.app.model.ChatRequest
 import com.neonpaw.app.model.ChatResponse
+import com.neonpaw.app.model.MemoryClearResponse
+import com.neonpaw.app.model.MemoryCreateRequest
+import com.neonpaw.app.model.MemoryExportData
+import com.neonpaw.app.model.MemoryImportRequest
+import com.neonpaw.app.model.MemoryImportResponse
 import com.neonpaw.app.model.MemoryInfo
+import com.neonpaw.app.model.MemoryItem
+import com.neonpaw.app.model.MemoryListResponse
+import com.neonpaw.app.model.MemoryUpdateRequest
 import com.neonpaw.app.model.SpeechStatusResponse
 import com.neonpaw.app.model.StateDelta
 import com.neonpaw.app.model.SttResponse
@@ -127,6 +135,131 @@ class APIClient(
             client.newCall(httpRequest).execute().use { response ->
                 if (!response.isSuccessful) return@withContext null
                 response.body?.bytes()
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    // --- Memory API ---
+
+    suspend fun listMemories(category: String? = null): MemoryListResponse? =
+        withContext(Dispatchers.IO) {
+            val url = if (category.isNullOrBlank()) {
+                "$baseUrl/api/memory"
+            } else {
+                val encoded = java.net.URLEncoder.encode(category, Charsets.UTF_8.name())
+                "$baseUrl/api/memory?category=$encoded"
+            }
+            getJson(url)
+        }
+
+    suspend fun createMemory(content: String, category: String = "custom"): MemoryItem? =
+        withContext(Dispatchers.IO) {
+            val body = json.encodeToString(MemoryCreateRequest(content, category))
+                .toRequestBody(JSON_MEDIA)
+            val request = Request.Builder()
+                .url("$baseUrl/api/memory")
+                .post(body)
+                .header("Content-Type", "application/json")
+                .build()
+            try {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) return@withContext null
+                    val payload = response.body?.string() ?: return@withContext null
+                    json.decodeFromString<MemoryItem>(payload)
+                }
+            } catch (_: Exception) {
+                null
+            }
+        }
+
+    suspend fun updateMemory(
+        id: Int,
+        content: String? = null,
+        category: String? = null,
+        pinned: Boolean? = null,
+    ): MemoryItem? = withContext(Dispatchers.IO) {
+        val body = json.encodeToString(
+            MemoryUpdateRequest(content = content, category = category, pinned = pinned),
+        ).toRequestBody(JSON_MEDIA)
+        val request = Request.Builder()
+            .url("$baseUrl/api/memory/$id")
+            .put(body)
+            .header("Content-Type", "application/json")
+            .build()
+        try {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@withContext null
+                val payload = response.body?.string() ?: return@withContext null
+                json.decodeFromString<MemoryItem>(payload)
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    suspend fun deleteMemory(id: Int): Boolean = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url("$baseUrl/api/memory/$id")
+            .delete()
+            .build()
+        try {
+            client.newCall(request).execute().use { it.isSuccessful }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    suspend fun clearMemories(): Boolean = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url("$baseUrl/api/memory")
+            .delete()
+            .build()
+        try {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@withContext false
+                // parse optional body
+                response.body?.string()?.let {
+                    runCatching { json.decodeFromString<MemoryClearResponse>(it) }
+                }
+                true
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    suspend fun exportMemories(): MemoryExportData? = withContext(Dispatchers.IO) {
+        getJson("$baseUrl/api/memory/export")
+    }
+
+    suspend fun importMemories(items: List<com.neonpaw.app.model.MemoryExportItem>): MemoryImportResponse? =
+        withContext(Dispatchers.IO) {
+            val body = json.encodeToString(MemoryImportRequest(items)).toRequestBody(JSON_MEDIA)
+            val request = Request.Builder()
+                .url("$baseUrl/api/memory/import")
+                .post(body)
+                .header("Content-Type", "application/json")
+                .build()
+            try {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) return@withContext null
+                    val payload = response.body?.string() ?: return@withContext null
+                    json.decodeFromString<MemoryImportResponse>(payload)
+                }
+            } catch (_: Exception) {
+                null
+            }
+        }
+
+    private inline fun <reified T> getJson(url: String): T? {
+        val request = Request.Builder().url(url).get().build()
+        return try {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return null
+                val payload = response.body?.string() ?: return null
+                json.decodeFromString<T>(payload)
             }
         } catch (_: Exception) {
             null

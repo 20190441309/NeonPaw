@@ -98,6 +98,7 @@ data class MemoryInfo(
     val content: String = "",
 )
 
+/** Chat-request memory payload (backend schemas.MemoryEntry). */
 @Serializable
 data class MemoryEntry(
     val content: String,

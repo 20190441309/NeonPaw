@@ -36,7 +36,6 @@ class PetStateManager(
         val history: List<ChatMessage> = emptyList(),
         val trace: List<TraceEntry> = emptyList(),
         val lastAction: PetAction? = null,
-        val memories: List<MemoryEntry> = emptyList(),
         val isConnected: Boolean = true,
         val hasBooted: Boolean = false,
     ) {
@@ -51,11 +50,9 @@ class PetStateManager(
 
     init {
         val (state, history) = store.load()
-        val memories = store.loadMemories()
         _uiState.value = UiState(
             petState = state,
             history = history,
-            memories = memories,
         )
         resetIdleTimer()
     }
@@ -150,7 +147,7 @@ class PetStateManager(
         _uiState.update { state ->
             val pet = state.petState
             val delta = response.stateDelta
-            var next = state.copy(
+            state.copy(
                 petState = pet.copy(
                     emotion = response.resolvedEmotion(),
                     mode = PetMode.SPEAKING,
@@ -164,12 +161,6 @@ class PetStateManager(
                 lastAction = response.resolvedAction(),
                 trace = response.trace,
             )
-            if (response.memory.shouldSave && response.memory.content.isNotBlank()) {
-                val memories = next.memories + MemoryEntry(content = response.memory.content)
-                next = next.copy(memories = memories)
-                store.saveMemories(memories)
-            }
-            next
         }
         persist()
     }
@@ -182,7 +173,7 @@ class PetStateManager(
         persist()
     }
 
-    fun buildChatRequest(message: String): ChatRequest {
+    fun buildChatRequest(message: String, memories: List<MemoryEntry>): ChatRequest {
         val state = _uiState.value
         val conversation = state.history.takeLast(10).map {
             ConversationMessage(role = it.role, content = it.content)
@@ -191,7 +182,7 @@ class PetStateManager(
             message = message,
             petState = state.petState,
             conversationHistory = conversation,
-            memories = state.memories,
+            memories = memories,
         )
     }
 

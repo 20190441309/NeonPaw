@@ -3,7 +3,8 @@ package com.neonpaw.app.data
 import android.content.Context
 import com.neonpaw.app.AppConfig
 import com.neonpaw.app.model.ChatMessage
-import com.neonpaw.app.model.MemoryEntry
+import com.neonpaw.app.model.MemoryExportData
+import com.neonpaw.app.model.MemoryItem
 import com.neonpaw.app.model.PetEmotion
 import com.neonpaw.app.model.PetMode
 import com.neonpaw.app.model.PetState
@@ -81,18 +82,40 @@ class PetStateStore(context: Context) {
             .apply()
     }
 
-    fun loadMemories(): List<MemoryEntry> {
+    fun loadMemoryItems(): List<MemoryItem> {
         val raw = prefs.getString(AppConfig.memoryStorageKey, null) ?: return emptyList()
         return try {
-            json.decodeFromString<List<MemoryEntry>>(raw)
+            json.decodeFromString<List<MemoryItem>>(raw)
         } catch (_: Exception) {
-            emptyList()
+            // Migrate legacy {content, createdAt} list
+            try {
+                val legacy = json.decodeFromString<List<LegacyMemory>>(raw)
+                legacy.map {
+                    MemoryItem(content = it.content, createdAt = it.createdAt)
+                }
+            } catch (_: Exception) {
+                emptyList()
+            }
         }
     }
 
-    fun saveMemories(memories: List<MemoryEntry>) {
+    fun saveMemoryItems(memories: List<MemoryItem>) {
         prefs.edit()
             .putString(AppConfig.memoryStorageKey, json.encodeToString(memories))
             .apply()
     }
+
+    fun encodeExport(data: MemoryExportData): String = json.encodeToString(data)
+
+    fun decodeExport(text: String): MemoryExportData? = try {
+        json.decodeFromString<MemoryExportData>(text)
+    } catch (_: Exception) {
+        null
+    }
+
+    @Serializable
+    private data class LegacyMemory(
+        val content: String,
+        val createdAt: String = "",
+    )
 }

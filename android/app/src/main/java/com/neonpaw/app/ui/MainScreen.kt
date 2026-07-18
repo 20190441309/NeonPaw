@@ -28,6 +28,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.neonpaw.app.data.APIClient
+import com.neonpaw.app.data.MemoryManager
 import com.neonpaw.app.data.PetStateManager
 import com.neonpaw.app.data.PetStateStore
 import com.neonpaw.app.model.ChatMessage
@@ -50,13 +51,17 @@ fun MainScreen() {
     val prefs = remember { context.getSharedPreferences(WAKE_MODE_PREF, Context.MODE_PRIVATE) }
 
     val store = remember { PetStateStore(context) }
-    val petManager: PetStateManager = viewModel(factory = PetStateManager.Factory(store))
     val apiClient = remember { APIClient() }
+    val petManager: PetStateManager = viewModel(factory = PetStateManager.Factory(store))
+    val memoryManager: MemoryManager = viewModel(
+        factory = MemoryManager.Factory(apiClient, store),
+    )
     val speechManager = remember { SpeechManager(context, apiClient) }
     val ttsManager = remember { SpeechSynthesizerManager(context, apiClient) }
     val wakeManager = remember { WakeWordManager(context, apiClient) }
 
     val petUi by petManager.uiState.collectAsStateWithLifecycle()
+    val memoryUi by memoryManager.uiState.collectAsStateWithLifecycle()
     val speechState by speechManager.state.collectAsStateWithLifecycle()
     val ttsState by ttsManager.state.collectAsStateWithLifecycle()
     val wakeState by wakeManager.state.collectAsStateWithLifecycle()
@@ -98,6 +103,7 @@ fun MainScreen() {
         speechManager.refreshBackendStatus()
         ttsManager.refreshBackendStatus()
         wakeManager.refreshBackendStatus()
+        // memoryManager hydrates in init
 
         wakeManager.setCallbacks(
             onWake = { result ->
@@ -112,6 +118,7 @@ fun MainScreen() {
                         runVoiceInteraction(
                             text = command,
                             petManager = petManager,
+                            memoryManager = memoryManager,
                             apiClient = apiClient,
                             ttsManager = ttsManager,
                             onFinished = { wakeManager.resume() },
@@ -125,6 +132,7 @@ fun MainScreen() {
                     runVoiceInteraction(
                         text = text,
                         petManager = petManager,
+                        memoryManager = memoryManager,
                         apiClient = apiClient,
                         ttsManager = ttsManager,
                         onFinished = { wakeManager.resume() },
@@ -206,6 +214,17 @@ fun MainScreen() {
             PetStatusPanel(petState = petUi.petState)
             AgentTracePanel(trace = petUi.trace)
 
+            MemoryPanel(
+                memories = memoryUi.memories,
+                backendAvailable = memoryUi.backendAvailable,
+                notice = memoryUi.notice ?: memoryUi.lastSaved?.let { "记住了：$it" },
+                onRemove = { item -> memoryManager.removeMemory(item) },
+                onTogglePin = { memoryManager.togglePin(it) },
+                onClearAll = { memoryManager.clearAll() },
+                onDismissNotice = { memoryManager.clearNotice() },
+                onRefresh = { memoryManager.refresh() },
+            )
+
             SpeechEngineBadge(
                 sttLabel = if (wakeModeEnabled) {
                     "wake/${wakeState.engineLabel}"
@@ -219,6 +238,17 @@ fun MainScreen() {
                     speechState.backendAvailable
                 },
                 ttsBackend = ttsState.backendAvailable,
+            )
+
+            // Memory source badge next to speech
+            Text(
+                text = "MEMORY:${if (memoryUi.backendAvailable) "SERVER" else "LOCAL"} (${memoryUi.memories.size})",
+                color = TerminalGreen.copy(alpha = 0.4f),
+                fontFamily = MonoFont,
+                fontSize = 9.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
             )
 
             WakeModeToggle(
@@ -265,7 +295,6 @@ fun MainScreen() {
                 isError = petUi.petState.mode == PetMode.ERROR,
                 isSupported = speechState.isSupported || wakeState.isSupported,
                 onTap = {
-                    // Backend STT: second tap finishes recording
                     if (speechState.backendRecording || speechState.isListening) {
                         speechManager.stop()
                         return@VoiceButton
@@ -283,6 +312,7 @@ fun MainScreen() {
                             runVoiceInteraction(
                                 text = text,
                                 petManager = petManager,
+                                memoryManager = memoryManager,
                                 apiClient = apiClient,
                                 ttsManager = ttsManager,
                                 onFinished = { wakeManager.resume() },
@@ -312,6 +342,7 @@ private fun beginListening(
 private suspend fun runVoiceInteraction(
     text: String,
     petManager: PetStateManager,
+    memoryManager: MemoryManager,
     apiClient: APIClient,
     ttsManager: SpeechSynthesizerManager,
     onFinished: (() -> Unit)? = null,
@@ -325,12 +356,17 @@ private suspend fun runVoiceInteraction(
     petManager.setThinking()
     petManager.addMessage(ChatMessage(role = "user", content = trimmed))
 
-    val request = petManager.buildChatRequest(trimmed)
+    val request = petManager.buildChatRequest(trimmed, memoryManager.chatMemories())
     try {
         val response = apiClient.chat(request)
         petManager.setConnected(true)
         petManager.addMessage(ChatMessage(role = "assistant", content = response.reply))
         petManager.applyResponse(response)
+
+        if (response.memory.shouldSave && response.memory.content.isNotBlank()) {
+            memoryManager.saveFromAgent(response.memory.content)
+        }
+
         petManager.setSpeaking()
         ttsManager.speak(response.reply, response.voiceStyle) {
             petManager.setIdle()

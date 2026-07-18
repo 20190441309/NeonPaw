@@ -156,6 +156,20 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
   → 回到 awake / 空闲超时后 sleeping
 ```
 
+### 服务端记忆
+
+与 Web 共用 ` /api/memory`：
+
+| 能力 | 行为 |
+|------|------|
+| 启动 | `GET /api/memory` 拉取；失败则用本地 SharedPreferences |
+| Agent 写入 | 回复 `memory.should_save` → `POST /api/memory` |
+| 对话注入 | 最近/置顶记忆作为 `memories` 发给 `/api/chat` |
+| UI | **MEMORY BANK** 面板：SERVER/LOCAL、分类、置顶、删除、清空 |
+| 离线 | 本地列表仍参与 chat；后端恢复后可 REFRESH 同步 |
+
+徽章行显示 `MEMORY:SERVER (n)`。
+
 ### 后端 STT / TTS
 
 启动时请求 `GET /api/speech/status`：
