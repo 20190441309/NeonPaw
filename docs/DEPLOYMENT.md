@@ -262,3 +262,17 @@ curl -X POST https://your-api-domain/api/chat \
 | 模拟器本地调试 | `http://10.0.2.2:8000` |
 | 真机局域网调试 | `http://192.168.x.x:8000` |
 | 生产环境 | `https://your-domain.com` |
+
+### 后端 STT / TTS（Android）
+
+Android 客户端与 Web 使用同一套 speech API：
+
+```text
+GET  /api/speech/status   → 是否启用后端 STT/TTS
+POST /api/speech/stt      → multipart WAV 上传转写
+POST /api/speech/tts      → JSON { text } → audio/wav
+```
+
+- 后端 FunASR / CosyVoice 未就绪时，Android 自动回退到系统 `SpeechRecognizer` / `TextToSpeech`
+- 完整 GPU 部署步骤见 [deployment-stt-tts.md](./deployment-stt-tts.md)
+- App 内徽章 `SPEECH STT:… TTS:…` 可确认当前引擎

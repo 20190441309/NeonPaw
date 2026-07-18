@@ -52,8 +52,8 @@ fun MainScreen() {
     val store = remember { PetStateStore(context) }
     val petManager: PetStateManager = viewModel(factory = PetStateManager.Factory(store))
     val apiClient = remember { APIClient() }
-    val speechManager = remember { SpeechManager(context) }
-    val ttsManager = remember { SpeechSynthesizerManager(context) }
+    val speechManager = remember { SpeechManager(context, apiClient) }
+    val ttsManager = remember { SpeechSynthesizerManager(context, apiClient) }
     val wakeManager = remember { WakeWordManager(context) }
 
     val petUi by petManager.uiState.collectAsStateWithLifecycle()
@@ -82,7 +82,6 @@ fun MainScreen() {
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
         if (granted) {
-            // If user was enabling wake mode, turn it on; otherwise start click-to-talk
             if (wakeModeEnabled) {
                 wakeManager.setEnabled(true)
             }
@@ -96,6 +95,9 @@ fun MainScreen() {
 
     LaunchedEffect(Unit) {
         petManager.runBootSequence()
+        speechManager.refreshBackendStatus()
+        ttsManager.refreshBackendStatus()
+
         wakeManager.setCallbacks(
             onWake = { result ->
                 val mode = petManager.uiState.value.petState.mode
@@ -128,9 +130,7 @@ fun MainScreen() {
                     )
                 }
             },
-            onCommandTimeout = {
-                // soft recovery — return to wake listening
-            },
+            onCommandTimeout = {},
         )
         if (wakeModeEnabled && hasMicPermission()) {
             wakeManager.setEnabled(true)
@@ -147,6 +147,8 @@ fun MainScreen() {
 
     val statusLabel = petUi.petState.mode.apiValue
     val footerHint = when {
+        speechState.isUploading -> "UPLOADING TO BACKEND STT..."
+        speechState.backendRecording -> "RECORDING... TAP AGAIN TO SEND"
         wakeState.enabled && wakeState.mode == WakeWordManager.Mode.WAKE_LISTENING ->
             "WAKE LISTENING..."
         wakeState.enabled && wakeState.mode == WakeWordManager.Mode.COMMAND_LISTENING ->
@@ -181,6 +183,8 @@ fun MainScreen() {
             val interim = when {
                 speechState.isListening && speechState.interimTranscript.isNotBlank() ->
                     speechState.interimTranscript
+                speechState.isUploading && speechState.interimTranscript.isNotBlank() ->
+                    speechState.interimTranscript
                 wakeState.enabled && wakeState.interim.isNotBlank() ->
                     wakeState.interim
                 else -> null
@@ -201,17 +205,23 @@ fun MainScreen() {
             PetStatusPanel(petState = petUi.petState)
             AgentTracePanel(trace = petUi.trace)
 
+            SpeechEngineBadge(
+                sttLabel = speechState.engineLabel,
+                ttsLabel = ttsState.engineLabel,
+                sttBackend = speechState.backendAvailable,
+                ttsBackend = ttsState.backendAvailable,
+            )
+
             WakeModeToggle(
                 enabled = wakeModeEnabled,
                 statusHint = wakeState.statusHint,
                 onToggle = {
                     val next = !wakeModeEnabled
                     if (next && !hasMicPermission()) {
-                        wakeModeEnabled = true // pending
+                        wakeModeEnabled = true
                         permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                         prefs.edit().putBoolean(WAKE_MODE_KEY, true).apply()
                     } else {
-                        // pause click-to-talk recognizer if turning wake on
                         if (next) speechManager.stop()
                         persistWakeMode(next)
                     }
@@ -233,19 +243,21 @@ fun MainScreen() {
 
             VoiceButton(
                 isListening = speechState.isListening ||
+                    speechState.backendRecording ||
+                    speechState.isUploading ||
                     wakeState.mode == WakeWordManager.Mode.COMMAND_LISTENING ||
                     wakeState.mode == WakeWordManager.Mode.SESSION_LISTENING,
-                isThinking = petUi.petState.mode == PetMode.THINKING,
+                isThinking = petUi.petState.mode == PetMode.THINKING || speechState.isUploading,
                 isSpeaking = ttsState.isSpeaking,
                 isError = petUi.petState.mode == PetMode.ERROR,
                 isSupported = speechState.isSupported || wakeState.isSupported,
                 onTap = {
-                    if (speechState.isListening) {
+                    // Backend STT: second tap finishes recording
+                    if (speechState.backendRecording || speechState.isListening) {
                         speechManager.stop()
                         return@VoiceButton
                     }
 
-                    // click-to-talk temporarily pauses wake loop
                     wakeManager.pause()
 
                     if (!hasMicPermission()) {

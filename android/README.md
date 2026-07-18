@@ -119,8 +119,9 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 | 能力 | 实现 |
 |------|------|
-| 语音识别 (STT) | `SpeechRecognizer`，中文 `zh-CN`，部分结果 + 置信度 |
-| 语音合成 (TTS) | `TextToSpeech`，按 `voice_style` 调语速/音调 |
+| 语音识别 (STT) | **优先后端** `POST /api/speech/stt`（WAV 录音上传）；不可用时回退 `SpeechRecognizer` |
+| 语音合成 (TTS) | **优先后端** `POST /api/speech/tts`（WAV → MediaPlayer）；不可用时回退 `TextToSpeech` |
+| 能力探测 | 启动时 `GET /api/speech/status`，UI 显示 `STT:…` / `TTS:…` |
 | 状态持久化 | `SharedPreferences` + kotlinx.serialization |
 | 扫描线效果 | Compose `Canvas` 动画 |
 | ASCII 渲染 | Monospace + 青绿 glow |
@@ -146,12 +147,30 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```text
 点屏幕唤醒
   → 点麦克风说话
-  → SpeechRecognizer 转文字
+  → [后端 STT 可用] 录 WAV → POST /api/speech/stt
+    [否则] SpeechRecognizer
   → POST /api/chat
   → 更新状态 + ASCII 帧
-  → TextToSpeech 读出 reply
+  → [后端 TTS 可用] POST /api/speech/tts → 播放 WAV
+    [否则] TextToSpeech
   → 回到 awake / 空闲超时后 sleeping
 ```
+
+### 后端 STT / TTS
+
+启动时请求 `GET /api/speech/status`：
+
+| 状态 | 行为 |
+|------|------|
+| `stt.available=true` | 麦克风 **点按开始录音 / 再点结束并上传**（最长 15s） |
+| `stt.available=false` | 设备 `SpeechRecognizer` 自动断句 |
+| `tts.available=true` | 用后端 WAV 播放 reply |
+| `tts.available=false` | 设备 `TextToSpeech` |
+
+后端 FunASR / CosyVoice 未部署时会自动走设备回退，App 仍可完整演示。  
+部署说明见仓库 `docs/deployment-stt-tts.md`。
+
+界面有 `SPEECH STT:… TTS:…` 徽章：高亮表示正在用后端引擎。
 
 ### 唤醒词 / 免提会话
 
