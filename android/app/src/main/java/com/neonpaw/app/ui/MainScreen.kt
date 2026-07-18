@@ -54,7 +54,7 @@ fun MainScreen() {
     val apiClient = remember { APIClient() }
     val speechManager = remember { SpeechManager(context, apiClient) }
     val ttsManager = remember { SpeechSynthesizerManager(context, apiClient) }
-    val wakeManager = remember { WakeWordManager(context) }
+    val wakeManager = remember { WakeWordManager(context, apiClient) }
 
     val petUi by petManager.uiState.collectAsStateWithLifecycle()
     val speechState by speechManager.state.collectAsStateWithLifecycle()
@@ -97,6 +97,7 @@ fun MainScreen() {
         petManager.runBootSequence()
         speechManager.refreshBackendStatus()
         ttsManager.refreshBackendStatus()
+        wakeManager.refreshBackendStatus()
 
         wakeManager.setCallbacks(
             onWake = { result ->
@@ -150,11 +151,11 @@ fun MainScreen() {
         speechState.isUploading -> "UPLOADING TO BACKEND STT..."
         speechState.backendRecording -> "RECORDING... TAP AGAIN TO SEND"
         wakeState.enabled && wakeState.mode == WakeWordManager.Mode.WAKE_LISTENING ->
-            "WAKE LISTENING..."
+            if (wakeState.backendAvailable) "WAKE · BACKEND STT..." else "WAKE LISTENING..."
         wakeState.enabled && wakeState.mode == WakeWordManager.Mode.COMMAND_LISTENING ->
-            "COMMAND LISTENING..."
+            if (wakeState.backendAvailable) "COMMAND · BACKEND STT..." else "COMMAND LISTENING..."
         wakeState.enabled && wakeState.mode == WakeWordManager.Mode.SESSION_LISTENING ->
-            "HANDS-FREE SESSION..."
+            if (wakeState.backendAvailable) "SESSION · BACKEND STT..." else "HANDS-FREE SESSION..."
         petUi.petState.mode == PetMode.SLEEPING -> "TAP SCREEN TO WAKE"
         petUi.petState.mode == PetMode.AWAKE -> "TAP MICROPHONE TO TALK"
         petUi.petState.mode == PetMode.LISTENING -> "LISTENING..."
@@ -206,15 +207,27 @@ fun MainScreen() {
             AgentTracePanel(trace = petUi.trace)
 
             SpeechEngineBadge(
-                sttLabel = speechState.engineLabel,
+                sttLabel = if (wakeModeEnabled) {
+                    "wake/${wakeState.engineLabel}"
+                } else {
+                    speechState.engineLabel
+                },
                 ttsLabel = ttsState.engineLabel,
-                sttBackend = speechState.backendAvailable,
+                sttBackend = if (wakeModeEnabled) {
+                    wakeState.backendAvailable
+                } else {
+                    speechState.backendAvailable
+                },
                 ttsBackend = ttsState.backendAvailable,
             )
 
             WakeModeToggle(
                 enabled = wakeModeEnabled,
-                statusHint = wakeState.statusHint,
+                statusHint = buildString {
+                    if (wakeState.backendAvailable) append("[后端STT] ")
+                    wakeState.statusHint?.let { append(it) }
+                    if (wakeState.isProcessing) append(" …")
+                }.ifBlank { wakeState.statusHint },
                 onToggle = {
                     val next = !wakeModeEnabled
                     if (next && !hasMicPermission()) {

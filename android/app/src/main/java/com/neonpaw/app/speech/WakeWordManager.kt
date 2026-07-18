@@ -9,14 +9,30 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import com.neonpaw.app.AppConfig
+import com.neonpaw.app.data.APIClient
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.coroutines.coroutineContext
+import kotlin.math.sqrt
 
 /**
  * Continuous wake-word + hands-free session manager.
- * Simplified port of frontend useWakeWord.ts for Android SpeechRecognizer.
+ *
+ * Prefer backend STT when available:
+ *   short WAV chunks → POST /api/speech/stt → phrase match
+ * Fall back to device SpeechRecognizer loop otherwise.
  *
  * Modes:
  * - idle
@@ -24,8 +40,10 @@ import kotlinx.coroutines.flow.update
  * - command_listening: woke, waiting for the next utterance
  * - session_listening: multi-turn hands-free after first command
  */
-class WakeWordManager(private val context: Context) {
-
+class WakeWordManager(
+    private val context: Context,
+    private val apiClient: APIClient,
+) {
     enum class Mode {
         IDLE,
         WAKE_LISTENING,
@@ -41,6 +59,9 @@ class WakeWordManager(private val context: Context) {
         val interim: String = "",
         val error: String? = null,
         val isSupported: Boolean = false,
+        val backendAvailable: Boolean = false,
+        val engineLabel: String = "device",
+        val isProcessing: Boolean = false,
     )
 
     data class WakeResult(
@@ -56,7 +77,13 @@ class WakeWordManager(private val context: Context) {
     val state: StateFlow<State> = _state.asStateFlow()
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
     private var recognizer: SpeechRecognizer? = null
+    private var backendLoopJob: Job? = null
+    private var activeRecorder: AudioWavRecorder? = null
+    private val stopChunk = AtomicBoolean(false)
+
     private var paused = false
     private var destroyed = false
 
@@ -70,6 +97,8 @@ class WakeWordManager(private val context: Context) {
 
     private var commandRetries = 0
     private var sessionRetries = 0
+    private var consecutiveSilent = 0
+    private var consecutiveSttFail = 0
 
     fun setCallbacks(
         onWake: (WakeResult) -> Unit,
@@ -81,14 +110,39 @@ class WakeWordManager(private val context: Context) {
         this.onCommandTimeout = onCommandTimeout
     }
 
+    /** Probe /api/speech/status — call on launch and when toggling wake mode. */
+    fun refreshBackendStatus(onDone: (() -> Unit)? = null) {
+        scope.launch {
+            val status = withContext(Dispatchers.IO) { apiClient.speechStatus() }
+            val available = status?.stt?.available == true
+            val engine = if (available) {
+                status?.stt?.engine?.ifBlank { "backend" } ?: "backend"
+            } else {
+                "device"
+            }
+            _state.update {
+                it.copy(
+                    backendAvailable = available,
+                    engineLabel = engine,
+                    isSupported = available || SpeechRecognizer.isRecognitionAvailable(context),
+                )
+            }
+            onDone?.invoke()
+        }
+    }
+
     fun setEnabled(enabled: Boolean) {
         if (enabled == _state.value.enabled) return
         if (enabled) {
             _state.update {
-                it.copy(enabled = true, error = null, statusHint = "唤醒待命中…")
+                it.copy(enabled = true, error = null, statusHint = "探测语音引擎…")
             }
             paused = false
-            startWakeListening()
+            refreshBackendStatus {
+                if (_state.value.enabled && !paused && !destroyed) {
+                    startWakeListening()
+                }
+            }
         } else {
             stopInternal(clearEnabled = true)
         }
@@ -99,12 +153,13 @@ class WakeWordManager(private val context: Context) {
         if (!_state.value.enabled) return
         paused = true
         cancelTimers()
-        stopRecognizerOnly()
+        stopListeningSources()
         _state.update {
             it.copy(
                 mode = Mode.IDLE,
                 statusHint = "唤醒已暂停",
                 interim = "",
+                isProcessing = false,
             )
         }
     }
@@ -127,7 +182,7 @@ class WakeWordManager(private val context: Context) {
             it.copy(
                 sessionActive = false,
                 mode = if (it.enabled && !paused) Mode.WAKE_LISTENING else Mode.IDLE,
-                statusHint = if (it.enabled) "唤醒待命中…" else null,
+                statusHint = if (it.enabled) wakeHint() else null,
             )
         }
         cancelTimers()
@@ -139,6 +194,7 @@ class WakeWordManager(private val context: Context) {
     fun release() {
         destroyed = true
         stopInternal(clearEnabled = true)
+        scope.cancel()
     }
 
     // --- listening modes ---
@@ -146,16 +202,18 @@ class WakeWordManager(private val context: Context) {
     private fun startWakeListening() {
         if (destroyed || paused || !_state.value.enabled) return
         commandRetries = 0
+        consecutiveSilent = 0
         _state.update {
             it.copy(
                 mode = Mode.WAKE_LISTENING,
                 sessionActive = false,
-                statusHint = "说「小爪醒醒」或「NEON PAW」",
+                statusHint = wakeHint(),
                 interim = "",
                 error = null,
+                isProcessing = false,
             )
         }
-        startRecognizer()
+        startListeningEngine()
     }
 
     private fun startCommandListening() {
@@ -163,12 +221,13 @@ class WakeWordManager(private val context: Context) {
         _state.update {
             it.copy(
                 mode = Mode.COMMAND_LISTENING,
-                statusHint = "我在听，请说…",
+                statusHint = commandHint(),
                 interim = "",
+                isProcessing = false,
             )
         }
         armCommandTimeout()
-        startRecognizer()
+        startListeningEngine()
     }
 
     private fun startSessionListening() {
@@ -177,15 +236,275 @@ class WakeWordManager(private val context: Context) {
             it.copy(
                 mode = Mode.SESSION_LISTENING,
                 sessionActive = true,
-                statusHint = "免提会话中…",
+                statusHint = sessionHint(),
                 interim = "",
+                isProcessing = false,
             )
         }
         armSessionTimeout()
-        startRecognizer()
+        startListeningEngine()
     }
 
-    private fun startRecognizer() {
+    private fun startListeningEngine() {
+        stopListeningSources()
+        if (_state.value.backendAvailable) {
+            startBackendLoop()
+        } else {
+            startDeviceRecognizer()
+        }
+    }
+
+    private fun stopListeningSources() {
+        stopChunk.set(true)
+        backendLoopJob?.cancel()
+        backendLoopJob = null
+        try {
+            activeRecorder?.cancel()
+        } catch (_: Exception) {
+        }
+        activeRecorder = null
+        stopRecognizerOnly()
+        stopChunk.set(false)
+    }
+
+    // --- Backend STT loop ---
+
+    private fun startBackendLoop() {
+        backendLoopJob?.cancel()
+        stopChunk.set(false)
+        backendLoopJob = scope.launch {
+            while (coroutineContext.isActive && !destroyed && !paused && _state.value.enabled) {
+                val mode = _state.value.mode
+                if (mode == Mode.IDLE) break
+
+                try {
+                    _state.update {
+                        it.copy(
+                            interim = if (mode == Mode.WAKE_LISTENING) {
+                                "后端监听中…"
+                            } else {
+                                "后端录音中…"
+                            },
+                            isProcessing = false,
+                        )
+                    }
+
+                    val chunkMs = when (mode) {
+                        Mode.WAKE_LISTENING -> WAKE_CHUNK_MS
+                        Mode.COMMAND_LISTENING -> COMMAND_CHUNK_MS
+                        Mode.SESSION_LISTENING -> SESSION_CHUNK_MS
+                        Mode.IDLE -> WAKE_CHUNK_MS
+                    }
+
+                    val wav = recordChunk(chunkMs)
+                    if (destroyed || paused || !_state.value.enabled) break
+                    if (wav.isEmpty()) {
+                        delay(BACKEND_GAP_MS)
+                        continue
+                    }
+
+                    if (isMostlySilent(wav)) {
+                        consecutiveSilent++
+                        // Still advance command/session timeouts via silence
+                        if (mode == Mode.WAKE_LISTENING) {
+                            _state.update { it.copy(interim = "") }
+                        }
+                        delay(BACKEND_GAP_MS)
+                        continue
+                    }
+                    consecutiveSilent = 0
+
+                    _state.update {
+                        it.copy(
+                            interim = "后端识别中…",
+                            isProcessing = true,
+                        )
+                    }
+
+                    val result = withContext(Dispatchers.IO) {
+                        apiClient.stt(wav, "wake_chunk.wav")
+                    }
+
+                    if (destroyed || paused || !_state.value.enabled) break
+
+                    if (result == null || !result.success) {
+                        consecutiveSttFail++
+                        if (consecutiveSttFail >= 3) {
+                            // Backend flaky — fall back to device for this session
+                            _state.update {
+                                it.copy(
+                                    backendAvailable = false,
+                                    engineLabel = "device",
+                                    error = "后端 STT 不稳定，改用设备识别",
+                                    isProcessing = false,
+                                )
+                            }
+                            consecutiveSttFail = 0
+                            startDeviceRecognizer()
+                            return@launch
+                        }
+                        delay(BACKEND_GAP_MS)
+                        continue
+                    }
+                    consecutiveSttFail = 0
+
+                    val text = result.text.trim()
+                    _state.update {
+                        it.copy(
+                            interim = text.ifBlank { "" },
+                            isProcessing = false,
+                            error = null,
+                        )
+                    }
+
+                    if (text.isNotBlank()) {
+                        when (handleFinalText(text)) {
+                            ListenAction.CONTINUE -> Unit
+                            ListenAction.HANDOFF -> {
+                                // Host pause() during chat; leave loop until resume()
+                                break
+                            }
+                            ListenAction.SWITCH_COMMAND -> {
+                                // Start command mode outside this cancelled loop
+                                break
+                            }
+                            ListenAction.STOP -> break
+                        }
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    if (destroyed || paused) break
+                    _state.update {
+                        it.copy(
+                            error = "后端唤醒出错，稍后重试",
+                            isProcessing = false,
+                        )
+                    }
+                    delay(800)
+                }
+
+                delay(BACKEND_GAP_MS)
+            }
+            _state.update { it.copy(isProcessing = false) }
+
+            // After loop ends for SWITCH_COMMAND, startCommandListening may already be running.
+            // HANDOFF relies on host calling pause()/resume().
+        }
+    }
+
+    private enum class ListenAction {
+        /** Keep chunk loop running */
+        CONTINUE,
+        /** Stop loop; host will pause() for chat/TTS */
+        HANDOFF,
+        /** Stop current loop and enter command_listening */
+        SWITCH_COMMAND,
+        /** Stop current loop; endSession already started wake again */
+        STOP,
+    }
+
+    private fun handleFinalText(text: String): ListenAction {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return ListenAction.CONTINUE
+
+        return when (_state.value.mode) {
+            Mode.WAKE_LISTENING -> handleWakeTranscript(trimmed)
+            Mode.COMMAND_LISTENING -> {
+                if (StopPhrases.isStopPhrase(trimmed)) {
+                    scheduleReturnToWake()
+                    ListenAction.STOP
+                } else {
+                    handleCommandTranscript(trimmed)
+                    ListenAction.HANDOFF
+                }
+            }
+            Mode.SESSION_LISTENING -> {
+                if (StopPhrases.isStopPhrase(trimmed)) {
+                    scheduleReturnToWake()
+                    ListenAction.STOP
+                } else {
+                    handleSessionTranscript(trimmed)
+                    ListenAction.HANDOFF
+                }
+            }
+            Mode.IDLE -> ListenAction.CONTINUE
+        }
+    }
+
+    /** End hands-free and restart wake listening after current loop exits. */
+    private fun scheduleReturnToWake() {
+        cancelTimers()
+        sessionRetries = 0
+        commandRetries = 0
+        _state.update {
+            it.copy(
+                sessionActive = false,
+                mode = Mode.IDLE,
+                statusHint = "会话结束，返回唤醒…",
+                interim = "",
+            )
+        }
+        mainHandler.post {
+            if (!destroyed && _state.value.enabled && !paused) {
+                startWakeListening()
+            }
+        }
+    }
+
+    private suspend fun recordChunk(durationMs: Long): ByteArray {
+        return withContext(Dispatchers.IO) {
+            val recorder = AudioWavRecorder()
+            activeRecorder = recorder
+            try {
+                recorder.start()
+                val step = 50L
+                var waited = 0L
+                while (waited < durationMs && !stopChunk.get() && !destroyed && !paused) {
+                    Thread.sleep(step)
+                    waited += step
+                }
+                if (stopChunk.get() || destroyed || paused) {
+                    recorder.cancel()
+                    ByteArray(0)
+                } else {
+                    recorder.stop()
+                }
+            } catch (_: Exception) {
+                try {
+                    recorder.cancel()
+                } catch (_: Exception) {
+                }
+                ByteArray(0)
+            } finally {
+                if (activeRecorder === recorder) activeRecorder = null
+            }
+        }
+    }
+
+    /** crude silence gate — skip near-empty PCM to save STT calls */
+    private fun isMostlySilent(wav: ByteArray): Boolean {
+        if (wav.size <= 44) return true
+        val pcm = wav.copyOfRange(44, wav.size)
+        if (pcm.size < 2) return true
+        var sumSq = 0.0
+        var n = 0
+        var i = 0
+        while (i + 1 < pcm.size) {
+            val sample = (pcm[i].toInt() and 0xff) or (pcm[i + 1].toInt() shl 8)
+            val s = sample.toShort().toInt()
+            sumSq += (s * s).toDouble()
+            n++
+            i += 2
+        }
+        if (n == 0) return true
+        val rms = sqrt(sumSq / n)
+        return rms < SILENCE_RMS_THRESHOLD
+    }
+
+    // --- Device STT path (fallback) ---
+
+    private fun startDeviceRecognizer() {
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
             _state.update {
                 it.copy(isSupported = false, error = "语音识别不可用")
@@ -199,7 +518,7 @@ class WakeWordManager(private val context: Context) {
 
             val r = SpeechRecognizer.createSpeechRecognizer(context)
             recognizer = r
-            r.setRecognitionListener(listener)
+            r.setRecognitionListener(deviceListener)
 
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(
@@ -217,9 +536,9 @@ class WakeWordManager(private val context: Context) {
             }
             try {
                 r.startListening(intent)
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 _state.update { it.copy(error = "无法启动语音识别") }
-                scheduleRestart(800)
+                scheduleDeviceRestart(800)
             }
         }
     }
@@ -236,7 +555,7 @@ class WakeWordManager(private val context: Context) {
 
     private fun stopInternal(clearEnabled: Boolean) {
         cancelTimers()
-        stopRecognizerOnly()
+        stopListeningSources()
         _state.update {
             it.copy(
                 enabled = if (clearEnabled) false else it.enabled,
@@ -244,12 +563,13 @@ class WakeWordManager(private val context: Context) {
                 sessionActive = false,
                 statusHint = null,
                 interim = "",
+                isProcessing = false,
             )
         }
         paused = false
     }
 
-    private fun scheduleRestart(delayMs: Long = 500) {
+    private fun scheduleDeviceRestart(delayMs: Long = 500) {
         restartRunnable?.let { mainHandler.removeCallbacks(it) }
         val mode = _state.value.mode
         val runnable = Runnable {
@@ -283,9 +603,7 @@ class WakeWordManager(private val context: Context) {
 
     private fun armSessionTimeout() {
         sessionTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
-        val r = Runnable {
-            endSession()
-        }
+        val r = Runnable { endSession() }
         sessionTimeoutRunnable = r
         mainHandler.postDelayed(r, SESSION_TIMEOUT_MS)
     }
@@ -299,27 +617,13 @@ class WakeWordManager(private val context: Context) {
         restartRunnable = null
     }
 
-    private fun handleFinalText(text: String) {
-        val trimmed = text.trim()
-        if (trimmed.isEmpty()) {
-            scheduleRestart(400)
-            return
-        }
-
-        when (_state.value.mode) {
-            Mode.WAKE_LISTENING -> handleWakeTranscript(trimmed)
-            Mode.COMMAND_LISTENING -> handleCommandTranscript(trimmed)
-            Mode.SESSION_LISTENING -> handleSessionTranscript(trimmed)
-            Mode.IDLE -> Unit
-        }
-    }
-
-    private fun handleWakeTranscript(text: String) {
+    private fun handleWakeTranscript(text: String): ListenAction {
         val match = WakePhrases.splitWakePhraseAndCommand(text)
         if (!match.hasWakeWord) {
-            // keep listening
-            scheduleRestart(300)
-            return
+            if (!_state.value.backendAvailable) {
+                scheduleDeviceRestart(300)
+            }
+            return ListenAction.CONTINUE
         }
 
         if (match.command.isNotBlank()) {
@@ -333,24 +637,26 @@ class WakeWordManager(private val context: Context) {
                 it.copy(sessionActive = true, statusHint = "收到指令…")
             }
             onWake?.invoke(result)
-            // command will be processed by host; host should pause us during chat/TTS
-        } else {
-            val result = WakeResult(
-                mode = "followup",
-                isFuzzy = match.isFuzzy,
-                phrase = match.phrase,
-            )
-            onWake?.invoke(result)
-            startCommandListening()
+            return ListenAction.HANDOFF
         }
+
+        val result = WakeResult(
+            mode = "followup",
+            isFuzzy = match.isFuzzy,
+            phrase = match.phrase,
+        )
+        onWake?.invoke(result)
+        // Schedule command mode after this loop iteration ends (avoid cancel-self)
+        mainHandler.post {
+            if (!destroyed && _state.value.enabled && !paused) {
+                startCommandListening()
+            }
+        }
+        return ListenAction.SWITCH_COMMAND
     }
 
     private fun handleCommandTranscript(text: String) {
         cancelTimers()
-        if (StopPhrases.isStopPhrase(text)) {
-            endSession()
-            return
-        }
         commandRetries = 0
         _state.update {
             it.copy(sessionActive = true, statusHint = "处理中…")
@@ -360,11 +666,6 @@ class WakeWordManager(private val context: Context) {
 
     private fun handleSessionTranscript(text: String) {
         cancelTimers()
-        if (StopPhrases.isStopPhrase(text)) {
-            endSession()
-            return
-        }
-        // wake word again with inline command still ok
         val match = WakePhrases.splitWakePhraseAndCommand(text)
         val payload = if (match.hasWakeWord && match.command.isNotEmpty()) {
             match.command
@@ -376,7 +677,23 @@ class WakeWordManager(private val context: Context) {
         onCommand?.invoke(payload)
     }
 
-    private val listener = object : RecognitionListener {
+    private fun wakeHint(): String {
+        return if (_state.value.backendAvailable) {
+            "后端STT · 说「小爪醒醒」"
+        } else {
+            "说「小爪醒醒」或「NEON PAW」"
+        }
+    }
+
+    private fun commandHint(): String {
+        return if (_state.value.backendAvailable) "后端STT · 我在听…" else "我在听，请说…"
+    }
+
+    private fun sessionHint(): String {
+        return if (_state.value.backendAvailable) "后端STT · 免提会话中…" else "免提会话中…"
+    }
+
+    private val deviceListener = object : RecognitionListener {
         override fun onReadyForSpeech(params: Bundle?) {
             _state.update { it.copy(error = null) }
         }
@@ -384,19 +701,15 @@ class WakeWordManager(private val context: Context) {
         override fun onBeginningOfSpeech() = Unit
         override fun onRmsChanged(rmsdB: Float) = Unit
         override fun onBufferReceived(buffer: ByteArray?) = Unit
-
         override fun onEndOfSpeech() = Unit
 
         override fun onError(error: Int) {
             when (error) {
                 SpeechRecognizer.ERROR_NO_MATCH,
                 SpeechRecognizer.ERROR_SPEECH_TIMEOUT,
-                -> {
-                    // silence is normal in wake loop
-                    scheduleRestart(350)
-                }
-                SpeechRecognizer.ERROR_CLIENT -> scheduleRestart(400)
-                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> scheduleRestart(700)
+                -> scheduleDeviceRestart(350)
+                SpeechRecognizer.ERROR_CLIENT -> scheduleDeviceRestart(400)
+                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> scheduleDeviceRestart(700)
                 SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> {
                     _state.update { it.copy(error = "请允许麦克风权限") }
                 }
@@ -404,9 +717,9 @@ class WakeWordManager(private val context: Context) {
                 SpeechRecognizer.ERROR_NETWORK_TIMEOUT,
                 -> {
                     _state.update { it.copy(error = "语音识别网络异常") }
-                    scheduleRestart(1200)
+                    scheduleDeviceRestart(1200)
                 }
-                else -> scheduleRestart(600)
+                else -> scheduleDeviceRestart(600)
             }
         }
 
@@ -415,7 +728,17 @@ class WakeWordManager(private val context: Context) {
                 ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 ?.firstOrNull()
                 .orEmpty()
-            handleFinalText(text)
+            when (handleFinalText(text)) {
+                ListenAction.CONTINUE -> {
+                    if (_state.value.enabled && !paused && !destroyed &&
+                        _state.value.mode == Mode.WAKE_LISTENING
+                    ) {
+                        scheduleDeviceRestart(300)
+                    }
+                }
+                ListenAction.HANDOFF, ListenAction.STOP -> Unit
+                ListenAction.SWITCH_COMMAND -> Unit // already posted startCommandListening
+            }
         }
 
         override fun onPartialResults(partialResults: Bundle?) {
@@ -432,7 +755,17 @@ class WakeWordManager(private val context: Context) {
     }
 
     companion object {
-        private const val COMMAND_TIMEOUT_MS = 10_000L
-        private const val SESSION_TIMEOUT_MS = 25_000L
+        private const val COMMAND_TIMEOUT_MS = 12_000L
+        private const val SESSION_TIMEOUT_MS = 30_000L
+
+        /** Wake chunks: short for lower latency */
+        private const val WAKE_CHUNK_MS = 2_800L
+        /** Command / session: slightly longer for full phrases */
+        private const val COMMAND_CHUNK_MS = 3_500L
+        private const val SESSION_CHUNK_MS = 3_500L
+        private const val BACKEND_GAP_MS = 200L
+
+        /** 16-bit PCM RMS threshold — below this skip STT */
+        private const val SILENCE_RMS_THRESHOLD = 280.0
     }
 }
